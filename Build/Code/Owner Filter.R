@@ -13,11 +13,13 @@ y<-str_pad(seq(1,17), 2, "left", pad="0")
 
 for(i in y){
 
-parcel <- read.dbf(file=paste0("./Data/Pardata", i, ".dbf"), as.is = FALSE)
+parcel <- read.dbf(file=paste0("./Build/Data/Pardata", i, ".dbf"), as.is = FALSE)
 
 own_dat <- parcel %>%
-  select(PARENT_LOC, LOCATOR, TAXYR, OWNER_NAME, PROP_ADD, OWN_ADD, OWN_CITY, OWN_STATE, OWN_ZIP,
-         PROPCLASS, TENURE, LUCODE,) %>%
+  filter(PROPCLASS == "R" & 
+           LIVUNIT>0 & 
+           YEARBLT > 1800 &
+           RESQFT > 100) %>%
   mutate(prop_add = trimws(as.character(droplevels(PROP_ADD))),
          own_add = trimws(as.character(droplevels(OWN_ADD)))) %>%
   filter(TENURE == "NOT OWNER") %>%
@@ -391,4 +393,4 @@ assign(paste0("own_dat",i), own_dat)
 
 rm(i, own_dat, y, parcel)
 
-save.image("./Data/Input/owners.RData")
+save.image(file="./Build/Data/Input/owners.RData")

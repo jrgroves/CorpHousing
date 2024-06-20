@@ -13,8 +13,8 @@ library(sf)
 
 #Load Data Files####
 
-loc<-st_read("./Data/Map/locators.shp")
-load("./Build/Input/owners.RData")
+loc<-st_read("./Build/Data/Map/locators.shp")
+load("./Build/Data/Input/owners.RData")
 
 
 #Set starting parameters####
@@ -61,11 +61,13 @@ for(i in y){
   corp<-par_sf2 %>%
     group_by(GEOID) %>%
     summarise_at(vars(Corporate),
-                 list(Mean_Frequency = mean)) %>%
+                 list(Mean_Frequency = mean,
+                      Overall = sum)) %>%
     st_drop_geometry()
   
   corp <- right_join(acs, corp, by = "GEOID") %>%
-    mutate(year = paste0("20", i))
+    mutate(year = paste0("20", i),
+           p_whole = Overall/value)
   
   ifelse(t==1, CORP <- corp, CORP <- rbind(CORP, corp))
   
@@ -74,7 +76,7 @@ for(i in y){
 
 #Generate Plot
 plot<-ggplot(CORP) +
-    geom_sf(aes(fill = Mean_Frequency)) +
+    geom_sf(aes(fill = p_whole)) +
     scale_fill_stepsn(colors = cols,breaks = breaks, name = "Percent Corporate") +
     facet_wrap( ~year)
   
