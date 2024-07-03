@@ -20,7 +20,7 @@ load("./Build/Output/owners.RData")
 #Set starting parameters####
 y <- seq(2002,2020)
 
-breaks <- seq(0, 0.6, by = 0.05)
+breaks <- seq(0, 0.5, by = 0.05)
 cols <- RColorBrewer::brewer.pal(11, "Spectral")
 var<-c("H001001")
 
@@ -112,7 +112,7 @@ for(i in y){
     select(-c(value, VAR_Overall))
   
 
-  
+  corp2<-filter(corp2, year>2008)
 
 #Generate Plot
 plot<-ggplot(corp2) +
