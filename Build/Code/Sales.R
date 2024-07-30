@@ -47,43 +47,50 @@ SALES <- sales %>%
   filter(!is.na(PRICE)) %>%
   select(PARID, SALEDT2, PRICE, SALETYPE, SALEVAL, year) %>%
   distinct() %>%
+  mutate(taxyear = year + 1,
+         presale = taxyear - 1,
+         postsale = taxyear + 1) %>%
   filter(year>2001 & year < 2020) 
 
 #Create main ownership data####
 
-for(i in year){
-  own<-get(paste0("fown_dat",i))
+  for(i in year){
+    own<-get(paste0("fown_dat",i))
+    
+    own <- own %>%
+      mutate(PARID = LOCATOR,
+             year = i) 
+    ifelse(i==2001,
+           OWN <- own,
+           OWN <- rbind(OWN, own ))
+  }
   
-  own <- own %>%
-    mutate(PARID = LOCATOR,
-           year = i) %>%
-    select(PARID, TENURE, year)
+  OWN <- filter(OWN, !is.na(OWN_STATE))
+  OWN <- filter(OWN, !is.na(OWN_ZIP))
+  OWN <- filter(OWN, !is.na(PROP_ZIP))
   
-  ifelse(i==2001,
-         OWN <- own,
-         OWN <- rbind(OWN, own ))
-}
-
-comp <- SALES %>%
-  mutate(coreyear = year,
-         preyear = coreyear - 1,
-         postyear = coreyear + 1,
-         year = preyear) %>%
-  left_join(., OWN, by=c("PARID","year")) %>%
-  rename(., pre = TENURE) %>%
-  mutate(year = postyear) %>%
-  left_join(., OWN, by=c("PARID","year"))%>%
-  rename(., post = TENURE) %>%
-  mutate(switch = case_when(pre == post ~ 0,
-                            pre != post ~ 1,
-                            TRUE ~ 1),
-         O2NO = case_when(pre == "OWNER" & post== "NOT OWNER" ~ 1,
-                          TRUE ~ 0),
-         NO2O = case_when(pre == "NOT OWNER" & post== "OWNER" ~ 1,
-                          TRUE ~ 0),
-         O2O = case_when(pre == "OWNER" & post== "OWNER" ~ 1,
-                          TRUE ~ 0),
-         NO2NO = case_when(pre == "NOT OWNER" & post== "NOT OWNER" ~ 1,
-                          TRUE ~ 0))
-
+  work <- SALES %>%
+    mutate(year = presale) %>%
+    left_join(., OWN, c("PARID", "year")) %>%
+    filter(!is.na(LOCATOR)) %>%
+    mutate(OWN_STATE = as.character(OWN_STATE),
+           OWN_ZIP = as.character(OWN_ZIP))
+  
+  work <- work %>%
+    mutate(year = postsale) %>%
+    left_join(., OWN, c("PARID", "year"))%>%
+    filter(!is.na(LOCATOR.y)) %>%
+    mutate(OWN_STATE.y = as.character(OWN_STATE.y),
+           OWN_ZIP.y = as.character(OWN_ZIP.y))
+  
+  core <- work %>%
+    mutate(ten = as.numeric(TENURE.x!=TENURE.y),
+           ten1 = case_when(TENURE.x == "NOT OWNER" & TENURE.y == "NOT OWNER" ~ 1,
+                            TENURE.x == "OWNER" & TENURE.y == "NOT OWNER" ~ 2,
+                            TENURE.x == "NOT OWNER" & TENURE.y == "OWNER" ~ 3,
+                            TRUE ~ 4),
+           own = as.numeric(OWNER_NAME.x != OWNER_NAME.y),
+           state = as.numeric(OWN_STATE.x != OWN_STATE.y),
+           zip = as.numeric(OWN_ZIP.x != OWN_ZIP.y))
+  
   
