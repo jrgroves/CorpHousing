@@ -94,16 +94,11 @@ for(i in cy){
 for(i in y){
   #Calculate the total living units in each census tract
 
-  parcel <- get(paste0("fown_dat",i))
+  parcel <- get(paste0("own_dat",i))
   parcel <- parcel %>%
     filter(LIVUNIT > 0) %>%
     select(PARENT_LOC, LOCATOR, TENURE, LIVUNIT,
-           Corporate, Partner, Trust, Bank, Instit, hoa, muni, private) %>%
-    mutate(key = Corporate+Partner+Trust+Bank+Instit+hoa+muni+private,
-           private = case_when(key == 0 ~ 1,
-                               private == 1 ~ 1,
-                               TRUE~0)) %>%
-    mutate(year = i)  %>%
+           Corporate, Bank, Trustee, Hoa, Muni, Nonprof, private, year, key) %>%
     right_join(parmap, ., by = c("PARENT_LOC", "LOCATOR")) %>%
     st_drop_geometry(.)
 
@@ -111,11 +106,15 @@ for(i in y){
   
   liv  <- agg("LIVUNIT", sum)
   Corp <- agg("Corporate", mean)
+  Trst <- agg("Trustee", mean)
   Priv <- agg("private", mean)
+  Bank <- agg("Bank", mean)
   
   core <- liv %>%
     right_join(., Corp, by=c("GEOID", "year")) %>%
-    right_join(., Priv, by=c("GEOID", "year")) 
+    right_join(., Priv, by=c("GEOID", "year")) %>%
+    right_join(., Trst, by=c("GEOID", "year")) %>%
+    right_join(., Bank, by=c("GEOID", "year")) 
   
   
   ifelse(i==2002, CORE <- core, CORE<-rbind(CORE, core))
@@ -127,7 +126,6 @@ CORE <- CORE %>%
                              year > 2019 ~ "2020",
                              TRUE ~ "2010")) 
 
-
 Map<-full_join(MAP2, CORE, by=c("GEOID", "mapyear"))
 
 
@@ -138,7 +136,6 @@ plot1<-ggplot(Map) +
     facet_wrap( ~year)
 
 plot2<-ggplot(Map) +
-  geom_sf(aes(fill = private)) +
-  scale_fill_stepsn(colors = cols,breaks = breaks, name = "Percent Private") +
+  geom_sf(aes(fill = Bank)) +
   facet_wrap( ~year)
   
