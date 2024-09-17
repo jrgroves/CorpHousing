@@ -1,7 +1,10 @@
-#Processes Sales Data
+#Processes the sales data file for all sales, uses BLS data to put prices into real terms
+
+#Saves: Sales.RData - main sale data with adjusted prices
 
 #Jeremy R. Groves
 #June 27, 2024
+#August 5, 2024: Added BLS data for adjusted and cleaned up files.
 
 rm(list=ls())
 
@@ -18,7 +21,7 @@ sales <- read.csv(file="./Build/Data/2020/sales.csv",
                   row.names = NULL, 
                   stringsAsFactors = FALSE)
 
-load(file="./Build/Output/owners.RData")
+
 
 #Get CPI data from BLS API#####
 
@@ -73,7 +76,6 @@ SALES <- sales %>%
                              TRUE ~ SALEVAL),
          SALEDT2 = as.Date(SALEDT, "%d-%b-%y"),
          date2 = format(SALEDT2, "%m-%Y"),   #for CPI merge
-         year = year(SALEDT2),
          PRICE = as.numeric(PRICE)) %>%
   filter(SALEVAL == "4" |
            SALEVAL == "5" |
@@ -84,12 +86,12 @@ SALES <- sales %>%
            SALEVAL == "Z" |
            SALEVAL == "T") %>%
   filter(!is.na(PRICE)) %>%
-  select(PARID, SALEDT2, date2, PRICE, SALETYPE, SALEVAL, year) %>%
+  select(PARID, SALEDT2, date2, PRICE, SALETYPE, SALEVAL) %>%
   distinct() %>%
-  mutate(taxyear = year + 1,
-         presale = taxyear - 1,
-         postsale = taxyear + 1) %>%
-  filter(year>2001 & year < 2020) 
+  mutate(saleyear = as.numeric(format(SALEDT2,'%Y')),
+         presale = saleyear - 1,
+         postsale = saleyear + 1) %>%
+  filter(saleyear>2001 & saleyear < 2020) 
 
 #Adjust sales prices in Sales data
 
@@ -101,69 +103,6 @@ SALES <- SALES %>%
   mutate(adj_price = PRICE * (cpi_max/value),
          lnadj_price = log(adj_price))
 
-#Create main ownership data####
+#Save main Sales Data
 
-  for(i in year){
-    own<-get(paste0("own_dat",i))
-    
-    own <- own %>%
-      mutate(PARID = LOCATOR,
-             year = i) 
-    ifelse(i==2001,
-           OWN <- own,
-           OWN <- rbind(OWN, own ))
-  }
-
- rm(own)
- rm(list = ls(pattern="^own_dat"))
-
-OWN <- filter(OWN, !is.na(OWN_STATE))
-OWN <- filter(OWN, !is.na(OWN_ZIP))
-OWN <- filter(OWN, !is.na(PROP_ZIP))
-
-#Pull in the ownership data for each sale####
-
-  work <- SALES %>%
-    mutate(year = presale) %>%
-    left_join(., OWN, c("PARID", "year")) %>%
-    filter(!is.na(LOCATOR)) %>%
-    mutate(OWN_STATE = as.character(OWN_STATE),
-           OWN_ZIP = as.character(OWN_ZIP))
-  
-  work <- work %>%
-    mutate(year = postsale) %>%
-    left_join(., OWN, c("PARID", "year"))%>%
-    filter(!is.na(LOCATOR.y)) %>%
-    mutate(OWN_STATE.y = as.character(OWN_STATE.y),
-           OWN_ZIP.y = as.character(OWN_ZIP.y))
-  
-  core <- work %>%
-    mutate(ten = as.numeric(TENURE.x!=TENURE.y),
-           ten1 = case_when(TENURE.x == "NOT OWNER" & TENURE.y == "NOT OWNER" ~ 1,
-                            TENURE.x == "OWNER" & TENURE.y == "NOT OWNER" ~ 2,
-                            TENURE.x == "NOT OWNER" & TENURE.y == "OWNER" ~ 3,
-                            TRUE ~ 4),
-           own = as.numeric(OWNER_NAME.x != OWNER_NAME.y),
-           state = as.numeric(OWN_STATE.x != OWN_STATE.y),
-           zip = as.numeric(OWN_ZIP.x != OWN_ZIP.y),
-           Corp = Corporate.x - Corporate.y,
-           Muni = Muni.x - Muni.y,
-           Bank = Bank.x - Bank.y,
-           Trus = Trustee.x - Trustee.y,
-           Nonp = Nonprof.x - Nonprof.y,
-           Hoa = Hoa.x - Hoa.y,
-           Priv = private.x - private.y) %>%
-    select(!matches("\\.[x]+")) %>%
-    select(!matches("\\.[y]+" ))
-  
-  rm(work)
-  
-#Add Sales Count to Each PARID 
-  c<-core %>%
-    count(PARID) 
-  
-  core <- core %>%
-    left_join(., c, by = "PARID") %>%
-    arrange(SALESDT2, .keep_all = TRUE)
-  
-  rm(c)
+save(SALES, file="./Build/Output/Sales.RData")
