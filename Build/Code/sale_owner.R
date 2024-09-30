@@ -1,83 +1,93 @@
-#Uses annual ownership files to track the tenure of a sold property pre and post sale. 
+#Uses annual ownership files and sales data to determine how the tenure and ownership information changes
+#after the sale of each parcel.
 
 #Uses: Sales.RData file created by Sales.R
+#      OWN.RData file created by Owner Filter Fixing Parallel.R        
 
 #Saves: sal_own.RData - sales data with pre and post sale ownership.
 
 #Jeremy R. Groves
-#September 16, 2024
+#Created: September 16, 2024
+#Updated: September 18, 2024
 
 rm(list=ls())
 
 library(tidyverse)
-library(doParallel)
-
 
 load(file="./Build/Output/Sales.RData")
 load(file="./Build/Output/Own.RData")
 
-year<-seq(2001, 2020, 1)
+#Create wide data of ownership tenure####
 
-#test<-  foreach(i=year) %dopar% {
-#  library(foreign)
-#  library(tidyverse)
+  own.ten <- OWN %>%
+    select(PARID, year, TENURE) %>%
+    pivot_wider(id_cols = PARID, 
+                names_from = year, 
+                names_prefix = "ten.",
+                values_from = TENURE)
 
-#The following removes 679 observations
-OWN <- filter(OWN, !is.na(OWN_STATE))
-OWN <- filter(OWN, !is.na(OWN_ZIP))
-OWN <- filter(OWN, !is.na(PROP_ZIP))
+#Create wide data of ownership corporate vs. private####
 
-#Pull in the ownership data for each sale####
+  own.pri <- OWN%>%
+    select(PARID, year, private) %>%
+    pivot_wider(id_cols = PARID, 
+                names_from = year, 
+                names_prefix = "priv.",
+                values_from = private)
 
-work <- SALES %>%
-  mutate(year = presale) %>%
-  left_join(., OWN, c("PARID", "year")) %>%
-  mutate(OWN_STATE = as.character(OWN_STATE),
-         OWN_ZIP = as.character(OWN_ZIP))
+#Clean sales data####
 
-work <- work %>%
-  mutate(year = postsale) %>%
-  left_join(., OWN, c("PARID", "year")) %>%
-  mutate(OWN_STATE.y = as.character(OWN_STATE.y),
-         OWN_ZIP.y = as.character(OWN_ZIP.y))
+  sold <- SALES %>%
+    select(PARID, saleyear) %>%
+    mutate(presale = saleyear - 1,
+           postsale = saleyear + 1)
 
-#NOTE that there are about 32000 observations, especially with more recent sales, that do not show up in owner
-#data for some reason.
+  work <- sold %>%
+    mutate(year = presale) %>%
+    left_join(., OWN, c("PARID", "year")) %>%
+    mutate(PREOWN_CITY = as.character(OWN_CITY),
+           PREOWN_STATE = as.character(OWN_STATE),
+           PREOWN_ZIP = as.character(OWN_ZIP),
+           PREOWN_TENURE = as.character(TENURE),
+           PREOWN_Private = as.character(private)) %>%
+    select(PARID, saleyear, presale, postsale, starts_with("PRE"))
+  
+  work <- work %>%
+    mutate(year = postsale) %>%
+    left_join(., OWN, c("PARID", "year")) %>%
+    mutate(POSTOWN_CITY = as.character(OWN_CITY),
+           POSTOWN_STATE = as.character(OWN_STATE),
+           POSTOWN_ZIP = as.character(OWN_ZIP),
+           POSTOWN_TENURE = as.character(TENURE),
+           POSTOWN_Private = as.character(private)) %>%
+    select(PARID, saleyear, presale, postsale, starts_with("PRE"), starts_with("POST"))
+  
+    #NOTE that there are about 32000 observations, especially with more recent sales, that do not show up in owner
+    #data for some reason.
 
-core <- work %>%
-  filter(!is.na(LOCATOR.x) & !is.na(LOCATOR.y)) %>%
-  mutate(ten = as.numeric(TENURE.x!=TENURE.y),
-         ten1 = case_when(TENURE.x == "NOT OWNER" & TENURE.y == "NOT OWNER" ~ 1,
-                          TENURE.x == "OWNER" & TENURE.y == "NOT OWNER" ~ 2,
-                          TENURE.x == "NOT OWNER" & TENURE.y == "OWNER" ~ 3,
-                          is.na(TENURE.x) & !is.na(TENURE.y) ~ 5, #this is the case where a property shows up after sale (none exist)
-                          !is.na(TENURE.x) & is.na(TENURE.y) ~ 6,
-                          TRUE ~ 4),  #this is owner sold to owner
-         own = as.numeric(OWNER_NAME.x != OWNER_NAME.y),
-         state = as.numeric(OWN_STATE.x != OWN_STATE.y),
-         zip = as.numeric(OWN_ZIP.x != OWN_ZIP.y),
-         Corp = Corporate.x - Corporate.y,
-         Muni = Muni.x - Muni.y,
-         Bank = Bank.x - Bank.y,
-         Trus = Trustee.x - Trustee.y,
-         Nonp = Nonprof.x - Nonprof.y,
-         Hoa = Hoa.x - Hoa.y,
-         Priv = private.x - private.y) %>%
-  select(!matches("\\.[x]+")) %>%
-  select(!matches("\\.[y]+" ))
-
-rm(work)
-
-#Add Sales Count to Each PARID 
-c<-core %>%
-  count(PARID) 
-
-core <- core %>%
-  left_join(., c, by = "PARID") %>%
-  arrange(SALEDT2, .keep_all = TRUE) %>%
-  select(-c(year))
-
-rm(c)
+    core <- work %>%
+      filter(!is.na(PREOWN_TENURE)) %>%
+      filter(!is.na(POSTOWN_TENURE)) %>%
+      mutate(ten = as.numeric(PREOWN_TENURE!=POSTOWN_TENURE),
+             ten1 = case_when(PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "NOT OWNER" ~ 1,
+                              PREOWN_TENURE == "OWNER" & POSTOWN_TENURE == "NOT OWNER" ~ 2,
+                              PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "OWNER" ~ 3,
+                              is.na(PREOWN_TENURE) & !is.na(POSTOWN_TENURE) ~ 5, #this is the case where a property shows up after sale (none exist)
+                              !is.na(PREOWN_TENURE) & is.na(POSTOWN_TENURE) ~ 6,
+                              TRUE ~ 4),  #this is owner sold to owner
+             city = as.numeric(PREOWN_CITY != POSTOWN_CITY),
+             state = as.numeric(PREOWN_STATE != POSTOWN_STATE),
+             zip = as.numeric(PREOWN_ZIP != POSTOWN_ZIP),
+             P2C = ifelse(PREOWN_Private == 1 & POSTOWN_Private == 0, 1, 0),
+             P2P = ifelse(PREOWN_Private == 1 & POSTOWN_Private == 1, 1, 0),
+             C2C = ifelse(PREOWN_Private == 0 & POSTOWN_Private == 0, 1, 0),
+             C2P = ifelse(PREOWN_Private == 0 & POSTOWN_Private == 1, 1, 0),
+             N2O = ifelse(PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "OWNER",1,0),
+             N2N = ifelse(PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "NOT OWNER",1,0),
+             O2O = ifelse(PREOWN_TENURE == "OWNER" & POSTOWN_TENURE == "OWNER",1,0),
+             O2N = ifelse(PREOWN_TENURE == "OWNER" & POSTOWN_TENURE == "NOT OWNER",1,0))
+    
+    rm(work)
 
 #Save Sales Data with ownership changes
-save(core, file="./Build/Output/sal_own.RData")
+  save(core, file="./Build/Output/sal_own.RData")

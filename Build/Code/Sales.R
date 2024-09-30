@@ -61,47 +61,47 @@ rm(payload, response, cpi2)
 
 #Set parameters#####
 
-year<-seq(2001,2020)
+  year<-seq(2001,2020)
 
 #Clean Sales Data#####
-
-SALES <- sales %>%
-  mutate(SALEVAL = case_when(SALEVAL == ".X" ~ "X",
-                             SALEVAL == "i" ~ "I",
-                             SALEVAL == "x" ~ "X",
-                             SALEVAL == " x" ~ "X",
-                             SALEVAL == "t" ~ "T",
-                             SALEVAL == "TT" ~ "T",
-                             SALEVAL == " T" ~ "T",
-                             TRUE ~ SALEVAL),
-         SALEDT2 = as.Date(SALEDT, "%d-%b-%y"),
-         date2 = format(SALEDT2, "%m-%Y"),   #for CPI merge
-         PRICE = as.numeric(PRICE)) %>%
-  filter(SALEVAL == "4" |
-           SALEVAL == "5" |
-           SALEVAL == "F" |
-           SALEVAL == "I" |
-           SALEVAL == "P" |
-           SALEVAL == "X" |
-           SALEVAL == "Z" |
-           SALEVAL == "T") %>%
-  filter(!is.na(PRICE)) %>%
-  select(PARID, SALEDT2, date2, PRICE, SALETYPE, SALEVAL) %>%
-  distinct() %>%
-  mutate(saleyear = as.numeric(format(SALEDT2,'%Y')),
-         presale = saleyear - 1,
-         postsale = saleyear + 1) %>%
-  filter(saleyear>2001 & saleyear < 2020) 
+  
+  SALES <- sales %>%
+    mutate(SALEVAL = case_when(SALEVAL == ".X" ~ "X",
+                               SALEVAL == "i" ~ "I",
+                               SALEVAL == "x" ~ "X",
+                               SALEVAL == " x" ~ "X",
+                               SALEVAL == "t" ~ "T",
+                               SALEVAL == "TT" ~ "T",
+                               SALEVAL == " T" ~ "T",
+                               TRUE ~ SALEVAL),
+           SALEDT2 = as.Date(SALEDT, "%d-%b-%y"),
+           date2 = format(SALEDT2, "%m-%Y"),   #for CPI merge
+           PRICE = as.numeric(PRICE)) %>%
+    filter(SALEVAL == "4" |
+             SALEVAL == "5" |
+             SALEVAL == "F" |
+             SALEVAL == "I" |
+             SALEVAL == "P" |
+             SALEVAL == "X" |
+             SALEVAL == "Z" |
+             SALEVAL == "T") %>%
+    filter(!is.na(PRICE)) %>%
+    select(PARID, SALEDT2, date2, PRICE, SALETYPE, SALEVAL) %>%
+    distinct() %>%
+    mutate(saleyear = as.numeric(format(SALEDT2,'%Y')),
+           presale = saleyear - 1,
+           postsale = saleyear + 1) %>%
+    filter(saleyear>2001 & saleyear < 2020) 
 
 #Adjust sales prices in Sales data
-
-cpi_max <- cpi$value[which(cpi$date2==max(cpi$date2))]
-
-SALES <- SALES %>%
-  right_join(., cpi, by="date2") %>%
-  filter(PRICE > 0) %>%                            #Limits to nominal price greater than 1K loss of 615 obs
-  mutate(adj_price = PRICE * (cpi_max/value),
-         lnadj_price = log(adj_price))
+  
+  cpi_max <- cpi$value[which(cpi$date2==max(cpi$date2))]
+  
+  SALES <- SALES %>%
+    right_join(., cpi, by="date2") %>%
+    filter(PRICE > 0) %>%                            #Limits to nominal price greater than 1K loss of 615 obs
+    mutate(adj_price = PRICE * (cpi_max/value),
+           lnadj_price = log(adj_price))
 
 #Save main Sales Data
 

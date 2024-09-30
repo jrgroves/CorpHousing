@@ -45,62 +45,54 @@ agg <- function(y, z){
 
 #Load Data Files####
 
-loc<-st_read("./Build/Data/2021/Parcels.shp")
-load("./Build/Output/owners.RData")
-load("./Build/Output/CenMap.RData")
+  loc<-st_read("./Build/Data/2021/Parcels.shp")
+  #load("./Build/Output/owners.RData")
+  load("./Build/Output/CenMap.RData")
+  #load("./Build/Output/OWN.RData")
 
 
 #Set starting parameters####
-y <- seq(2002,2020)
-
-cy <-c(2009, 2010, 2020)
-
-breaks <- seq(0, 0.5, by = 0.05)
-cols <- RColorBrewer::brewer.pal(11, "Spectral")
-var<-c("B25017_001")
-
-
-#Clean up the PARDAT shapefile for merge with ACS maps
-
-parmap <- loc %>%
-  select(PARENT_LOC, LOCATOR, PROP_ADD, PROP_ZIP) %>%
-  st_centroid()
-
-
-#Get 2010 Tiger Files from Census####
-for(i in cy){
-  acs <- get_acs(geography = "tract",
-                       variables = var,
-                       year = i,
-                       state = 29,
-                       county = 189,
-                       geometry = TRUE) 
-  acs <- acs %>%
-    select(GEOID, estimate, geometry) %>%
-    rename_with(., ~ paste0("GEOID",i), starts_with("GEOID")) %>%
-    rename_with(., ~ paste0("estimate",i), starts_with("estimate")) %>%
-    st_make_valid(.)
- 
-  map <- st_transform(acs, st_crs(parmap)) #projects ACS map to match STL maps
+  y <- seq(2002,2020)
   
-  parmap<-st_intersection(parmap, map)
+  cy <-c(2009, 2010, 2020)
   
+  breaks <- seq(0, 0.5, by = 0.05)
+  cols <- RColorBrewer::brewer.pal(11, "Spectral")
+  var<-c("B25017_001")
+
+
+#Clean up the PARDAT Shape file for merge with ACS maps
+
+  parmap <- loc %>%
+    select(PARENT_LOC, LOCATOR, PROP_ADD, PROP_ZIP) %>%
+    st_centroid()
   
-}
+  parmap <- st_transform(parmap, st_crs(MAP2)) #projects STL map to match CENSUS maps
+
+#Link parcels with census tracts for all three years as seperate sf objects
+  
+  cen.00 <- MAP2 %>%
+    filter(mapyear == "2009") %>%
+    select(B2) %>%
+    st_intersection(., parmap)
+  
 
 
 #Merge the annual owner data with the 2021 parcel map with census tracks####
-
-for(i in y){
-  #Calculate the total living units in each census tract
-
-  parcel <- get(paste0("own_dat",i))
-  parcel <- parcel %>%
-    filter(LIVUNIT > 0) %>%
-    select(PARENT_LOC, LOCATOR, TENURE, LIVUNIT,
-           Corporate, Bank, Trustee, Hoa, Muni, Nonprof, private, year, key) %>%
-    right_join(parmap, ., by = c("PARENT_LOC", "LOCATOR")) %>%
-    st_drop_geometry(.)
+  
+  for(i in y){
+    #Calculate the total living units in each census tract
+  
+    parcel <- get(paste0("own_dat",i))
+    parcel <- OWN %>%
+      filter(LIVUNIT > 0) %>%
+      select(PARENT_LOC, LOCATOR, TENURE, LIVUNIT,
+             Corporate, Bank, Trustee, Hoa, Muni, Nonprof, private, year, key) 
+    
+    
+    %>%
+      right_join(parmap, ., by = c("PARENT_LOC", "LOCATOR")) %>%
+      st_drop_geometry(.)
 
 
   
