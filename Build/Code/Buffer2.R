@@ -21,29 +21,19 @@ cen.loc <- loc %>%
   select(PARENT_LOC, LOCATOR) %>%
   st_centroid() %>%
   mutate(PARID = LOCATOR) %>%
-  distinct(PARID, .keep_all = TRUE)
+  distinct(PARID, .keep_all = TRUE) %>%
+  filter(!is.na(PARID)) %>%
+  rowid_to_column(., "ROW")
 
 temp <- st_intersects(buffer.1, cen.loc)
 
-parcel <- SALES %>%
-  mutate(nn_lnadj_price = NA)
+for(i in seq(1,length(temp))){
+  
+  c<-unlist(temp1[i])
+  temp.list <- list(cen.loc$PARID[which(cen.loc$ROW %in% c)])
+  names(temp.list) <- buffer.1$PARID[i]
+  ifelse(i==1, buff.list <- temp.list, buff.list <- c(buff.list, temp.list))
+  
+}
 
-for(i in seq(1, length(temp))){
-  
-  t<-(temp[[1]])
-  
-  tt<-as.data.frame(t)
-  tt$p <- NA
-  for(i in seq(1, length(t))){
-    c<-t[i]
-    tt$p<-replace(tt$p, c, cen.loc$PARID[c])
-  }
-  
-  
-  
-  
-  
-    parcel[,k] = replace(parcel[,k], temp[[i]], map$GEOID[i])
-  }
-  k<-k+1
-  
+save(buff.list, file="./Build/output/bufflist1_4.RData")
