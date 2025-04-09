@@ -5,6 +5,7 @@
 #Jeremy R. Groves
 #June 27, 2024
 #August 5, 2024: Added BLS data for adjusted and cleaned up files.
+#April 8, 2025: Updated with 2024 EOY Sales file and read from external zip.
 
 rm(list=ls())
 
@@ -14,14 +15,12 @@ library(rjson)
 library(blsAPI)
 
 #Load in Data#####
-sales <- read.csv(file="./Build/Data/2020/sales.csv",
-                  header = TRUE,
-                  sep = "|",
-                  quote = "", 
-                  row.names = NULL, 
-                  stringsAsFactors = FALSE)
+#Set the year of the EOY file to extract from
+i <- 2024
 
-
+#Extract and Read
+temp <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"), "sales.txt"), 
+                 sep = "|", header = TRUE, stringsAsFactors = FALSE)
 
 #Get CPI data from BLS API#####
 
@@ -43,7 +42,7 @@ cpi <- response %>%
 payload <- list(
   'seriesid' = c('CUSR0000SA0'),
   'startyear' = 2020,
-  'endyear' = 2023,
+  'endyear' = 2024,
   'registrationKey' = '8213e4e9bef14041a5f00491b6c123d6')
 
 response <- blsAPI(payload, 2, TRUE)
@@ -61,11 +60,11 @@ rm(payload, response, cpi2)
 
 #Set parameters#####
 
-  year<-seq(2001,2020)
+  year<-seq(2001,2024)
 
 #Clean Sales Data#####
   
-  SALES <- sales %>%
+  sales <- temp %>%
     mutate(SALEVAL = case_when(SALEVAL == ".X" ~ "X",
                                SALEVAL == "i" ~ "I",
                                SALEVAL == "x" ~ "X",
@@ -91,13 +90,13 @@ rm(payload, response, cpi2)
     mutate(saleyear = as.numeric(format(SALEDT2,'%Y')),
            presale = saleyear - 1,
            postsale = saleyear + 1) %>%
-    filter(saleyear>2001 & saleyear < 2020) 
+    filter(saleyear>2001 & saleyear < 2025) 
 
 #Adjust sales prices in Sales data
   
   cpi_max <- cpi$value[which(cpi$date2==max(cpi$date2))]
   
-  SALES <- SALES %>%
+  SALES <- sales %>%
     right_join(., cpi, by="date2") %>%
     filter(PRICE > 0) %>%                            #Limits to nominal price greater than 1K loss of 615 obs
     mutate(adj_price = PRICE * (cpi_max/value),

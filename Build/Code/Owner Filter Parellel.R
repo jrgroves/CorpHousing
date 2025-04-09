@@ -10,7 +10,7 @@
 #August 1: Changed the original attempt to use regex expressions. Includes all owners without regard to tenure
 #September 8: Modified to run using parallel processing
 #September 17: Added combination into since OWN file long with cleaning up missing values that can be known.
-
+#April 8, 2025: Added data up to 2024 EOY files. Also set to load off external drive for zip file extract.
 
 rm(list=ls())
 
@@ -28,7 +28,7 @@ library(doParallel)
   
 #Define Values#####
 
-y<-seq(2001,2020)
+y<-seq(2001,2024)
   
 #Corporate Names#####
 CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
@@ -95,46 +95,63 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
     test<-  foreach(i=y) %dopar% {
         library(foreign)
         library(tidyverse)
+        
+      i<-2003
         #Calculate the total living units in each census tract
-        ifelse(i<2018,
-               parcel <- read.dbf(file=paste0("./Build/Data/", i, "/Pardata.dbf"), as.is = FALSE),
-               parcel <- read.csv(file=paste0("./Build/Data/", i, "/primary_parcel.csv"),
-                                  header = TRUE,
-                                  sep = "|",
-                                  quote = "", 
-                                  row.names = NULL, 
-                                  stringsAsFactors = FALSE))
-        
-        ifelse(i<2018,
-               parcel <- parcel %>%
-                 mutate(PROP_ADD = trimws(as.character(droplevels(PROP_ADD))),
-                        OWN_ADD = trimws(as.character(droplevels(OWN_ADD)))),
-               parcel <- parcel %>%
-                 mutate(PARENT_LOC = PARID,
-                        LOCATOR = PARID,
-                        PROPCLASS = CLASS,
-                        PROP_ADD = paste(TAX_ADRNO, TAX_DIR, TAX_STREET, TAX_SUFFIX, sep = " "),
-                        PROP_ADD = gsub("\\s+", " ", str_trim(PROP_ADD)),
-                        OWN_ADD = paste(OWNER_ADRNO, OWNER_DIR, OWNER_STREET, OWNER_SUFFIX, sep = " "),
-                        OWN_ADD = gsub("NA", "", OWN_ADD),
-                        OWN_ADD = gsub("\\s+", " ", str_trim(OWN_ADD)),
-                        OWNER_NAME = OWN1,
-                        OWN_CITY = OWNER_CITY,
-                        OWN_STATE = OWNER_STATE,
-                        OWN_ZIP = OWNER_ZIP,
-                        PROP_ZIP = TAX_ZIP,
-                        TENURE = case_when(PROP_ADD == OWN_ADD ~ "OWNER",
-                                           PROP_ADD != OWN_ADD ~ "NOT OWNER") )
-        )  
       
-      
+      ifelse(i < 2009,{
+        load(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
+                 filename = "pardat.RData"))
+        load(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
+                         filename = "owndat.RData"))
+        temp <- left_join(pardat, owndat, by="parid", relationship = "many-to-many")
         
+        
+        parcel <- temp %>%
+          mutate(PROP_ADD = paste(adrno, adrdir, adrstr, adrsuf, sep = " "),
+                 PROP_ADD = gsub("\\s+", " ", str_trim(PROP_ADD)),
+                 OWN_ADD = paste(o_adrno, o_adrdir, o_adrstr, o_adrsuf, sep = " "),
+                 OWN_ADD = gsub("NA", "", OWN_ADD),
+                 OWN_ADD = gsub("\\s+", " ", str_trim(OWN_ADD)),
+                 OWNER_NAME = o_name1,
+                 OWN_CITY = o_city,
+                 OWN_STATE = o_statecode,
+                 OWN_ZIP = o_zip,
+                 PROP_ZIP = zip1,
+                 TENURE = case_when(PROP_ADD == OWN_ADD ~ "OWNER",
+                                    PROP_ADD != OWN_ADD ~ "NOT OWNER"))
+        names(parcel) <- toupper(names(parcel))
+      },{
+        file.nm  <- ifelse(i < 2013, "PRIMARY_PARCEL.txt", "primary_parcel.csv")
+        
+        
+        temp <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
+                             filename = file.nm), sep = "|", header = TRUE, stringsAsFactors = FALSE)
+      
+        colnames(temp) <- gsub("\\.", "_", colnames(temp))
+      
+        parcel <- temp %>%
+           mutate(PROP_ADD = paste(TAX_ADRNO, TAX_DIR, TAX_STREET, TAX_SUFFIX, sep = " "),
+                  PROP_ADD = gsub("\\s+", " ", str_trim(PROP_ADD)),
+                  OWN_ADD = paste(OWNER_ADRNO, OWNER_DIR, OWNER_STREET, OWNER_SUFFIX, sep = " "),
+                  OWN_ADD = gsub("NA", "", OWN_ADD),
+                  OWN_ADD = gsub("\\s+", " ", str_trim(OWN_ADD)),
+                  OWNER_NAME = OWN1,
+                  OWN_CITY = OWNER_CITY,
+                  OWN_STATE = OWNER_STATE,
+                  OWN_ZIP = OWNER_ZIP,
+                  PROP_ZIP = TAX_ZIP,
+                  TENURE = case_when(PROP_ADD == OWN_ADD ~ "OWNER",
+                                     PROP_ADD != OWN_ADD ~ "NOT OWNER"))
+      })
+      
       
       #CODE Names##### 
       own_dat <- parcel %>%
-          filter(PROPCLASS == "R" & 
-                   LIVUNIT>0) %>%
-          select(PARENT_LOC, LOCATOR, OWNER_NAME, OWN_ADD, OWN_CITY, OWN_STATE, OWN_ZIP,
+          filter(CLASS == "R" & 
+                 LIVUNIT > 0 &
+                !is.na(LIVUNIT)) %>%
+          select(PARID, OWNER_NAME, OWN_ADD, OWN_CITY, OWN_STATE, OWN_ZIP,
                  PROP_ADD, PROP_ZIP, LIVUNIT, TENURE) %>%
           mutate(
             OWNER_NAME = gsub("\\s+", " ", OWNER_NAME),
@@ -321,7 +338,7 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
             Hoa = case_when(Bank == 1 & Hoa == 1 ~ 0,
                             Corporate == 1 & Hoa == 1 ~ 0,
                             TRUE ~ Hoa)) %>%
-         distinct(., LOCATOR, .keep_all = TRUE ) %>%
+         distinct(., PARID, .keep_all = TRUE ) %>%
           mutate(key = Corporate+Bank+Trustee+Muni+Nonprof+Hoa,
                  private = case_when(key==0 ~ 1,
                                      TRUE ~ 0),
