@@ -10,26 +10,19 @@
 #August 1: Changed the original attempt to use regex expressions. Includes all owners without regard to tenure
 #September 8: Modified to run using parallel processing
 #September 17: Added combination into since OWN file long with cleaning up missing values that can be known.
-#April 8, 2025: Added data up to 2024 EOY files. Also set to load off external drive for zip file extract.
+#April 8, 2025: Added data up to 2024 EOY files. Also set to load off external drive for zip file extract. 
+                #Also removed parallel processing.
 
 rm(list=ls())
 
 library(tidyverse)
 library(foreign)
-library(foreach)
-library(doParallel)
 
-#Set Up Cores
-  n_cores <- detectCores()
-
-#Register Cluster
-  cluster <- makeCluster(n_cores - 1)
-  registerDoParallel(cluster)
   
 #Define Values#####
 
 y<-seq(2001,2024)
-  
+
 #Corporate Names#####
 CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
           "\\s(CASTLE POINT LIVING)+\\s+",
@@ -92,41 +85,90 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
 
 #Loop Parallel Code####
 
-    test<-  foreach(i=y) %dopar% {
-        library(foreign)
-        library(tidyverse)
-        
-      i<-2003
-        #Calculate the total living units in each census tract
-      
+     #Calculate the total living units in each census tract
+   for(i in y){
       ifelse(i < 2009,{
         load(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
                  filename = "pardat.RData"))
-        load(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
-                         filename = "owndat.RData"))
-        temp <- left_join(pardat, owndat, by="parid", relationship = "many-to-many")
+        
+        ##OWNDAT Fixed Width read######
+        owndat <- read_fwf(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
+                               filename = "owndat.csv"), 
+                           fwf_cols(parid = 9,
+                                    taxyr = 4,
+                                    o_name1 = 40,
+                                    o_name2 = 40,
+                                    addrtryp = 1,
+                                    o_adrno = 10,
+                                    o_adradd = 6,
+                                    o_adrdir = 2,
+                                    o_adrstr = 30,
+                                    o_adrsuf = 8,
+                                    o_adrsuf2 = 8,
+                                    o_city = 40,
+                                    o_statecode = 2,
+                                    o_country = 30,
+                                    zip = 10,
+                                    o_unitdesc = 10,
+                                    o_unitno = 10,
+                                    addr1 = 80,
+                                    addr2 = 80,
+                                    addr3 = 80,
+                                    o_zip1 = 5,
+                                    zip2 = 4,
+                                    carrier_rt = 4,
+                                    postal_inx = 10,
+                                    pctown = 7,
+                                    salekey = 8,
+                                    conveyno = 9,
+                                    type1 = 3,
+                                    type2 = 3,
+                                    type3 = 3,
+                                    type4 = 3,
+                                    notecd = 2,
+                                    num = 6,
+                                    link = 15,
+                                    partial = 1,
+                                    book = 8,
+                                    page = 8,
+                                    notes = 80,
+                                    user = 100),
+                           col_types = cols("c","n","c","c","c","n","c","c","c","c",
+                                            "c","c","c","c","c","c","c","c","c","c",
+                                            "c","c","c","c","c","n","n","c","c","c",
+                                            "c","c","c","c","c","c","c","c","c"))
+        
+        owndat <- owndat %>%
+          select(parid, taxyr, starts_with("o_"))
+        
+        names(owndat)<-tolower(names(owndat))
+        
+        #######
+        
+        temp <- left_join(pardat, owndat, by="parid", relationship = "many-to-many") 
         
         
         parcel <- temp %>%
           mutate(PROP_ADD = paste(adrno, adrdir, adrstr, adrsuf, sep = " "),
+                 PROP_ADD = gsub(" NA ", " ", PROP_ADD),
                  PROP_ADD = gsub("\\s+", " ", str_trim(PROP_ADD)),
                  OWN_ADD = paste(o_adrno, o_adrdir, o_adrstr, o_adrsuf, sep = " "),
                  OWN_ADD = gsub("NA", "", OWN_ADD),
-                 OWN_ADD = gsub("\\s+", " ", str_trim(OWN_ADD)),
+                 OWN_ADD = as.character(gsub("\\s+", " ", str_trim(OWN_ADD))),
                  OWNER_NAME = o_name1,
                  OWN_CITY = o_city,
                  OWN_STATE = o_statecode,
-                 OWN_ZIP = o_zip,
+                 OWN_ZIP = o_zip1,
                  PROP_ZIP = zip1,
                  TENURE = case_when(PROP_ADD == OWN_ADD ~ "OWNER",
-                                    PROP_ADD != OWN_ADD ~ "NOT OWNER"))
+                                    PROP_ADD != OWN_ADD ~ "NOT OWNER"),
+                 livunit = as.numeric(livunit))
+      
         names(parcel) <- toupper(names(parcel))
+       
       },{
-        file.nm  <- ifelse(i < 2013, "PRIMARY_PARCEL.txt", "primary_parcel.csv")
-        
-        
         temp <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
-                             filename = file.nm), sep = "|", header = TRUE, stringsAsFactors = FALSE)
+                             filename = "primary_parcel.csv"), sep = "|", header = TRUE, stringsAsFactors = FALSE)
       
         colnames(temp) <- gsub("\\.", "_", colnames(temp))
       
@@ -142,10 +184,10 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                   OWN_ZIP = OWNER_ZIP,
                   PROP_ZIP = TAX_ZIP,
                   TENURE = case_when(PROP_ADD == OWN_ADD ~ "OWNER",
-                                     PROP_ADD != OWN_ADD ~ "NOT OWNER"))
+                                     PROP_ADD != OWN_ADD ~ "NOT OWNER"),
+                  LIVUNIT = as.numeric(LIVUNIT))
       })
-      
-      
+
       #CODE Names##### 
       own_dat <- parcel %>%
           filter(CLASS == "R" & 
@@ -344,37 +386,14 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                                      TRUE ~ 0),
                  year = i) %>%
           arrange(PROP_ADD, .keep_all = TRUE) 
-        #return(own_dat)
+      
+      ifelse(i==2001,
+             OWN <- own_dat,
+             OWN <- rbind(OWN, own_dat))
        
     }
   
-#Pull out from list and create own_dat files####
- 
-   k<-1
-  for(i in y){
-    c<-as.data.frame(test[k])
-    assign(paste0("own_dat",i), c)
-    k<-k+1
-  }
 
-#Clean and save environment with OWN_DAT files####
-  
-  rm(i, k, test, n_cores, CORP, cluster)
-
-  save.image(file="./Build/Output/owners2.RData")
-
-#Merge of individual years into single frame.#####
-
-for(i in y){
-  own<-get(paste0("own_dat",i))
-  
-  own <- own %>%
-    mutate(PARID = LOCATOR,
-           year = i) 
-  ifelse(i==2001,
-         OWN <- own,
-         OWN <- rbind(OWN, own ))
-}
 
 #Cleanup of Owner Data
 
@@ -455,7 +474,12 @@ OWN <- OWN %>%
         OWN$OWN_STATE<-ifelse(is.na(OWN$OWN_STATE), temp2$OWN_STATE[inds], OWN$OWN_STATE)
         OWN$OWN_ZIP<-ifelse(is.na(OWN$OWN_ZIP), temp2$OWN_ZIP[inds], OWN$OWN_ZIP)
 
-rm(own, temp, temp2)
+OWN <- OWN %>%
+  mutate(PROP_ZIP <- as.numeric(PROP_ZIP),
+         OWN_ZIP <- as.numeric(OWN_ZIP)) %>%
+  select(-zip)
+        
+rm(owndat, temp, temp2, inds, fix1, parcel, pardat, y)
 rm(list = ls(pattern="^own_dat"))
 
 save(OWN, file="./Build/Output/Own.RData")

@@ -3,6 +3,9 @@ Paper looking at corporate ownership of rental property in St. Louis County
 
 ##Project Updates
 
+-April 9, 2025
+Updated with new data from Assessor's office and reworked code to load original data form zip files on external drive.
+
 - Sept. 27, 2024
 I continued to clean up the codes and write information about the codes in this readme file. I have also learned that using *st_intersects()* results in much faster intersections than the full *st_interstion()* command. The output is a list with each main item being one of the buffer zones and the values being the row numbers for the observations in the parcel data that are within that buffer. Since this is a rather quick process, I can do it over and over again when needed. Where the length might come from is then calculating the averages;however, it seems i should be able to do that in parallel to speed up.
 

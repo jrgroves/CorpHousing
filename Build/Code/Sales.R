@@ -19,8 +19,8 @@ library(blsAPI)
 i <- 2024
 
 #Extract and Read
-temp <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"), "sales.txt"), 
-                 sep = "|", header = TRUE, stringsAsFactors = FALSE)
+temp <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
+                     "sales.csv"), sep = "|", header = TRUE, stringsAsFactors = FALSE)
 
 #Get CPI data from BLS API#####
 
@@ -64,7 +64,7 @@ rm(payload, response, cpi2)
 
 #Clean Sales Data#####
   
-  sales <- temp %>%
+  sales.tmp <- temp %>%
     mutate(SALEVAL = case_when(SALEVAL == ".X" ~ "X",
                                SALEVAL == "i" ~ "I",
                                SALEVAL == "x" ~ "X",
@@ -73,9 +73,10 @@ rm(payload, response, cpi2)
                                SALEVAL == "TT" ~ "T",
                                SALEVAL == " T" ~ "T",
                                TRUE ~ SALEVAL),
-           SALEDT2 = as.Date(SALEDT, "%d-%b-%y"),
-           date2 = format(SALEDT2, "%m-%Y"),   #for CPI merge
-           PRICE = as.numeric(PRICE)) %>%
+           saledate = as.Date(SALEDT, "%d-%b-%Y"),
+           date2 = format(saledate, "%m-%Y"),   #for CPI merge
+           saleyr = year(saledate),
+           price = as.numeric(PRICE)) %>%
     filter(SALEVAL == "4" |
              SALEVAL == "5" |
              SALEVAL == "F" |
@@ -84,24 +85,24 @@ rm(payload, response, cpi2)
              SALEVAL == "X" |
              SALEVAL == "Z" |
              SALEVAL == "T") %>%
-    filter(!is.na(PRICE)) %>%
-    select(PARID, SALEDT2, date2, PRICE, SALETYPE, SALEVAL) %>%
+    filter(!is.na(price)) %>%
+    select(PARID, saledate, date2, price, saleyr, SALETYPE, SALEVAL) %>%
     distinct() %>%
-    mutate(saleyear = as.numeric(format(SALEDT2,'%Y')),
-           presale = saleyear - 1,
-           postsale = saleyear + 1) %>%
-    filter(saleyear>2001 & saleyear < 2025) 
+    filter(saleyr > 2001 ) %>%
+    filter(saleyr < 2025) %>%
+    mutate(presale = saleyr - 1,
+           postsale = saleyr + 1)
 
 #Adjust sales prices in Sales data
   
   cpi_max <- cpi$value[which(cpi$date2==max(cpi$date2))]
   
-  SALES <- sales %>%
+  sales <- sales.tmp %>%
     right_join(., cpi, by="date2") %>%
-    filter(PRICE > 0) %>%                            #Limits to nominal price greater than 1K loss of 615 obs
-    mutate(adj_price = PRICE * (cpi_max/value),
+    filter(price > 1000) %>%                            #Limits to nominal price greater than 1K loss of 615 obs
+    mutate(adj_price = price * (cpi_max/value),
            lnadj_price = log(adj_price))
 
 #Save main Sales Data
 
-save(SALES, file="./Build/Output/Sales.RData")
+save(sales, file="./Build/Output/Sales.RData")
