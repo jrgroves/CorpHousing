@@ -6,18 +6,20 @@
 #Jeremy R. Groves
 #September 18, 2024
 
+#April 14, 2025: Updated with new 2025 data.
+
 rm(list=ls())
 
 library(tidyverse)
 library(sf)
 
 load(file="./Build/Output/Sales.RData")
-loc<-st_read("./Build/Data/2021/Parcels.shp")
+loc<-st_read("F:/Data/Saint Louis GIS Data/gis_2025/Parcels_Current.shp")
 
 #Find unique PARIDs for sold properties
 
-  sold <- SALES %>%
-    select(PARID, saleyear) %>%
+  sold <- sales %>%
+    select(PARID, saleyr) %>%
     distinct(PARID, .keep_all = TRUE)
 
 #Convert parcel map to centroid map
@@ -29,24 +31,24 @@ loc<-st_read("./Build/Data/2021/Parcels.shp")
     distinct(PARID, .keep_all = TRUE)
 
 #Create Buffer Maps
-  buffer.1 <- cen.loc %>%
+  buffer <- cen.loc %>%
     filter(PARID %in% sold$PARID) %>%
     st_buffer(., 1320) %>% #1/4 mile buffer
     distinct(PARID, .keep_all = TRUE)
+
+  save(buffer, file="./Build/Output/Buffer1_4.RData")
   
-  save(buffer.1, file="./Build/Output/Buffer1_4.RData")
-  
-  buffer.2 <- cen.loc %>%
+  buffer <- cen.loc %>%
     filter(PARID %in% sold$PARID) %>%
     st_buffer(., 2640) %>% #1/2 mile buffer
     distinct(PARID, .keep_all = TRUE)
   
-  save(buffer.2, file="./Build/Output/Buffer1_2.RData")
+  save(buffer, file="./Build/Output/Buffer1_2.RData")
   
-  buffer.3 <- cen.loc %>%
+  buffer <- cen.loc %>%
     filter(PARID %in% sold$PARID) %>%
     st_buffer(., 3960) %>% #1/2 mile buffer
     distinct(PARID, .keep_all = TRUE)
   
-  save(buffer.3, file="./Build/Output/Buffer3_4.RData")
+  save(buffer, file="./Build/Output/Buffer3_4.RData")
  

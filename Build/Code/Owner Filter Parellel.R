@@ -392,8 +392,6 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
              OWN <- rbind(OWN, own_dat))
        
     }
-  
-
 
 #Cleanup of Owner Data
 

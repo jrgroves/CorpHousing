@@ -12,7 +12,7 @@ library(sf)
 
 #Get ACS TIGER files for three census years and link to the 2021 Parcel map
     
-    loc<-st_read("./Build/Data/2021/Parcels.shp")
+    loc<-st_read("F:/Data/Saint Louis GIS Data/gis_2025/Parcels_Current.shp")
 
     parmap <- loc %>%
       select(PARENT_LOC, LOCATOR, PROP_ADD, PROP_ZIP) %>%
