@@ -12,121 +12,115 @@ library(tidycensus)
 library(ipumsr)
 library(sf)
 
-
-
-#IPUMS NGIS Annual Tract Estimates downloaded from: https://www.nhgis.org/annual-tract-estimates#interpolation
-
-dat <- read.csv(file = "./Build/Input/nhgis_tract_popest_2000_2019_29.csv")
-
-data.race <- dat %>%
-  filter(COUNTYA == "189") %>%
-  select(-c("GEOID", "STATEA", "STATE", "COUNTYA", "COUNTY","TRACTA", "GEOGYEAR")) %>%
-  group_by(GISJOIN, RACE) %>% 
-  summarise(across(ESTIMATE_2000:ESTIMATE_2019, sum)) %>%
-  ungroup() %>%
-  pivot_longer(cols = starts_with("ESTIMATE"), names_to = "YEAR", names_prefix = "ESTIMATE_", values_to = "POP") %>%
-  pivot_wider(id_cols = c(GISJOIN, YEAR), names_from = RACE, values_from = POP) %>%
-  mutate(pop = rowSums(.[,3:8]),
-         per_wht = white / pop,
-         per_blk = black / pop,
-         per_asian = asian/pop,
-         per_other = 1 - per_wht - per_blk - per_asian,
-         other = aian + multi + nhopi) %>%
-  select(-c("aian", "multi","nhopi"))
-
-data.gender <- dat %>%
-  filter(COUNTYA == "189") %>%
-  select(-c("GEOID", "STATEA", "STATE", "COUNTYA", "COUNTY","TRACTA", "GEOGYEAR", "RACE")) %>%
-  mutate(agenum = case_when(AGEGRP == "00_04" ~ "1",
-                            AGEGRP == "05_09" ~ "1",
-                            AGEGRP == "10_14" ~ "1",
-                            AGEGRP == "15_19" ~ "1",
-                            AGEGRP == "64_69" ~ "2",
-                            AGEGRP == "70_74" ~ "2",
-                            AGEGRP == "75_79" ~ "2",
-                            AGEGRP == "80_84" ~ "2",
-                            AGEGRP == "85_up" ~ "2",
-                            TRUE ~ "3")) %>%
-  group_by(GISJOIN, SEX, agenum) %>% 
-  summarise(across(ESTIMATE_2000:ESTIMATE_2019, sum)) %>%
-  ungroup() %>%
-  pivot_longer(cols = starts_with("ESTIMATE"), names_to = "YEAR", names_prefix = "ESTIMATE_", values_to = "POP") %>%
-  mutate(AGEGRP = case_when(agenum == "1" ~ "und20",
-                            agenum == "2" ~ "over64",
-                            agenum == "3" ~ "a20_64")) %>%
-  pivot_wider(id_cols = c(GISJOIN, YEAR), names_from = c(SEX, AGEGRP), values_from = POP) %>%
-  mutate(female = F_und20 + F_over64 + F_a20_64,
-         male = M_und20 + M_over64 + M_a20_64,
-         under20 = F_und20 + M_und20,
-         over64 = F_over64 + M_over64,
-         per_fem = female / (female + male),
-         per_und20 = under20/(female + male),
-         per_over64 = over64 / (female + male)) %>%
-  select(-starts_with("F_"), -starts_with("M_"))
-
-data.est <- data.race %>%
-  left_join(., data.gender, by=c("GISJOIN", "YEAR"))
-
-rm(data.gender, data.race)
-
-#Subsequent data (2020 - 2023) downloaded via API
-#ACS 5-Year Data starting in 2006 downloaded via API 
-
-
 #Set starting parameters####
-  y <- seq(2009,2023)
-  
-  breaks <- seq(0, 1, by = 0.1)
-  cols <- RColorBrewer::brewer.pal(11, "Spectral")
-  var<-c("B02001_001","B02001_002" )
+y <- seq(2010,2023)
+
+breaks <- seq(0, 1, by = 0.1)
+cols <- RColorBrewer::brewer.pal(11, "Spectral")
+
+var<-c("B01003","B02001","B01002","B19013","B15002","B17023","B25010","B25008","S0101")
 
 #Get ACS data from Census####
-    for(i in y){
-    acs <- get_acs(geography = "tract",
-                         variables = var,
-                         year = i,
-                         state = 29,
-                         county = 189,
-                         geometry = FALSE) #Geometry different for 2009, 2010-2019, 2020 + thus the three maps below
-    acs <- acs %>%
-      mutate(variable = case_when(variable == "B02001_001" ~ "pop",
-                                  variable == "B02001_002" ~ "white",)) %>%
-      pivot_wider(., id_cols = "GEOID", names_from = "variable", values_from = "estimate")  %>%
-      mutate(per_wht = white / pop,
-             year = i,
-             GISJOIN = paste0("G",substr(GEOID, 1, 2), "0", substr(GEOID, 3,5), "0", substr(GEOID, 6, nchar(GEOID)))) %>%
-      select(-GEOID)
-    
-    ifelse(i==2009, 
-           ACS <- acs, 
-           ACS <- rbind(ACS, acs))
-    }
 
-#Testing and Comparing the estimates with annual ACS values####
-   ACS$acs <- 1
+for(k in var){
+   for(i in y){
+      acs <- get_acs(geography = "tract",
+                   table = k,
+                   year = i,
+                   state = 29,
+                   county = 189,
+                   cache_table = TRUE,
+                   geometry = FALSE) #Geometry different for 2009, 2010-2019, 2020 + thus the three maps below
 
-   core <- data.est %>%
-     select(GISJOIN, YEAR, white, per_wht, pop) %>%
-     mutate(year = YEAR,
-            acs = 0) %>%
-     select(-YEAR)%>%
-     rbind(., ACS)
-   
-   test <- core %>%
-     select(GISJOIN) %>%
-     distinct() %>%
-     sample_n(8)
-   
-   test2 <- core %>%
-     filter(GISJOIN %in% test$GISJOIN) %>%
-     mutate(year = as.numeric(year),
-            acs = as.character(acs))
-   
-   ggplot(test2) +
-     geom_line(aes(x = year, y = per_wht, colour = GISJOIN, linetype = acs))
- 
+      temp <- acs %>%
+        select(-moe, -NAME) %>%
+        mutate(year = i)
+      
+      ifelse(i==2010, 
+             TEMP <- temp, 
+             TEMP <- rbind(TEMP, temp))
+      
+      rm(temp)
+  }
+  
+  ifelse(k == "B01003",
+         ACS <- TEMP,
+         ACS <- rbind(ACS, TEMP))
+}
 
-#Get ACS TIGER files for three census years and link to the 2025 Parcel map ####
+
+
+#Reformatting and naming the Census data
+
+census <- ACS %>%
+  mutate(variable = case_when(variable == "B01003_001" ~ "pop",
+                              variable == "B02001_002" ~ "white",
+                              variable == "B02001_003" ~ "black",
+                              variable == "B02001_004" ~ "asian",
+                              variable == "B01002_001" ~ "age",
+                              variable == "B19013_001" ~ "income",
+                              variable == "B15002_011" ~ "m_hs",
+                              variable == "B15002_012" ~ "m_sc1",
+                              variable == "B15002_013" ~ "m_sc2",
+                              variable == "B15002_014" ~ "m_asc",
+                              variable == "B15002_015" ~ "m_bac",
+                              variable == "B15002_016" ~ "m_mas",
+                              variable == "B15002_017" ~ "m_pro",
+                              variable == "B15002_018" ~ "m_doc",
+                              variable == "B15002_028" ~ "f_hs",
+                              variable == "B15002_029" ~ "f_sc1",
+                              variable == "B15002_030" ~ "f_sc2",
+                              variable == "B15002_031" ~ "f_asc",
+                              variable == "B15002_032" ~ "f_bac",
+                              variable == "B15002_033" ~ "f_mas",
+                              variable == "B15002_034" ~ "f_pro",
+                              variable == "B15002_035" ~ "f_doc",
+                              variable == "B17023_002" ~ "pov1",
+                              variable == "B17023_003" ~ "pov2",
+                              variable == "B17023_004" ~ "pov3",
+                              variable == "B17023_005" ~ "pov4",
+                              variable == "B17023_006" ~ "pov5",
+                              variable == "B17023_007" ~ "pov6",
+                              variable == "B17023_008" ~ "pov7",
+                              variable == "B17023_009" ~ "pov8",
+                              variable == "B17023_010" ~ "pov9",
+                              variable == "B17023_011" ~ "pov10",
+                              variable == "B17023_012" ~ "pov11",
+                              variable == "B17023_013" ~ "pov12",
+                              variable == "B25008_002" ~ "own",
+                              variable == "B25008_003" ~ "rent",
+                              variable == "B25010_002" ~ "own_sz",
+                              variable == "B25010_003" ~ "rent_sz",
+                              variable == "S0101_C02_022" ~ "m_16u",
+                              variable == "S0101_C03_022" ~ "f_16u",
+                              variable == "S0101_C02_030" ~ "m_65o",
+                              variable == "S0101_C03_030" ~ "f_65o",
+                              TRUE ~ "delete")) %>%
+  filter(variable != "delete") %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(per_own = own / (own + rent),
+         per_wht = white / pop,
+         per_blk = black / pop,
+         per_asn = asian / pop,
+         per_oth = 1 - per_wht - per_blk - per_asn,
+         per_u16 = (m_16u + f_16u) / pop,
+         per_o65 = (m_65o + f_65o) / pop,
+         per_hs = (m_hs + f_hs) / pop,
+         per_scol = (m_sc1 + m_sc2 + f_sc1 + f_sc2) / pop,
+         per_asdg = (m_asc + f_asc) / pop,
+         per_bach = (m_bac + f_bac) / pop,
+         per_advdg = (m_mas + m_pro + m_doc + f_mas + f_pro + f_doc) / pop,
+         per_pov1 = (pov1 + pov2 + pov3) / pop,   #percent below 1 times the poverty line
+         per_pov2 = (pov4 + pov5 + pov6 + pov7 + pov8) / pop, #percent between 1 times and below 2 times poverty
+         per_pov3 = pov9 / pop) %>%  #percent between 2 and below 3 times poverty.
+  select(GEOID, starts_with("per"), income, age, own_sz, rent_sz, year) %>%
+  mutate(cen_yr = case_when(year == 2009 ~ 2000,
+                            year > 2009 & year < 2020 ~ 2010,
+                            TRUE ~ 2020))
+
+save(census, file="./Build/Output/census.RData")
+rm(ACS, census, acs, TEMP, var, y, i, k)
+#Get ACS TIGER files for three census years and link to the 2025 Parcel map to have GEOIDs for each year ####
     
     loc<-st_read("F:/Data/Saint Louis GIS Data/gis_2025/Parcels_Current.shp")
 
@@ -154,10 +148,7 @@ rm(data.gender, data.race)
         mutate(CENSUS_TRA = substr(GEOID, 6, 11),
                mapyear = as.character(i)) %>%
         select(GEOID, mapyear)
-      ifelse(i == 2009, MAP <- map, MAP <- rbind(MAP, map))
-    }
-    
-      
+  
       parmap <- st_transform(parmap, st_crs(map)) #projects STL map to match CENSUS maps
     
       temp <- st_intersects(map, parmap)
@@ -166,19 +157,25 @@ rm(data.gender, data.race)
         parcel[,k] = replace(parcel[,k], temp[[i]], map$GEOID[i])
       }
       k<-k+1
-
     }
-    cen.map <- map
-      rm(MAP)
-    save(cen.map, file="./Build/Output/CenMap.RData")
 
-#Create a MAP of Percent below 2X Poverty Level for 2009, 2010, and 2020 as test.#####
-  MAP2 <- map %>%
-    right_join(., ACS, by=c("GEOID", "mapyear")) %>%
-    select(GEOID, mapyear, B2, geometry)
-  
-  ggplot(MAP2) +
-    geom_sf(aes(fill = B2)) +
-    scale_fill_stepsn(colors = cols,breaks = breaks, name = "Percent Below 2 times Poverty Level") +
-    facet_wrap( ~mapyear)
+    save(parcel, file="./Build/Output/CenMap.RData")
+    load("./Build/Output/census.RData")
+    
+    p.map <- parcel %>%
+      mutate(PARID = LOCATOR) %>%
+      select("PARID", starts_with("GEOID")) %>%
+      slice(rep(1:n(), each = 12)) %>%
+      group_by(PARID) %>%
+      mutate(year = 1:n()) %>%
+      ungroup() %>%
+      mutate(year = as.numeric(year) + 2009,
+             GEOID = case_when(year < 2020 ~ GEOID.10,
+                               TRUE ~ GEOID.20)) %>%
+      select(PARID, year, GEOID) %>%
+      left_join(., census, by=c("GEOID", "year"))
+   
+  save(p.map, file="./Build/Output/par_cen.RData")  
+
+
 
