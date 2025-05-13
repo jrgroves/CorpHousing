@@ -1,15 +1,16 @@
-#Pulls ACS data
+#Pulls ACS data using the ACS API. Right now only contains data from 2010 to 2023 due to ACS limitations
+#for data at the tract level.
 #This file needs the Owner Filter.R file to run first.
 
 
 #Jeremy R. Groves
 #June 20, 2024
+#Updated: May 9, 2025
 
 rm(list=ls())
 
 library(tidyverse)
 library(tidycensus)
-library(ipumsr)
 library(sf)
 
 #Set starting parameters####

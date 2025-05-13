@@ -1,8 +1,11 @@
 #This scripts use the buffer_list dataframes from bufflistX_X.RData created by Buffer_Create.R 
-#Pulls up each list, joins with relevant year file and create neighbor values
+#Pulls up each list, joins with relevant data from OWN file to determined the share of neighbors of each
+#sale that are owned according to various metrics.
 
 #Jeremy R. Groves
 #May 12, 2025
+
+#OUTPUT ./Build/Output/core.nbX_X.RData
 
 rm(list=ls())
 
@@ -11,7 +14,9 @@ library(tidyverse)
 load(file="./Build/Output/Sales.RData")
 load(file="./Build/Output/bufferlist1_4a.RData")
 
-year <- seq(2009,2012,1)
+year <- seq(2009,2023,1)
+
+#year <- 2009
 
 for(yr in year){
 
@@ -27,10 +32,13 @@ for(yr in year){
   
   load("./Build/Output/Own.RData")
   
-  data.2 <- OWN %>%
-    filter(year == yr) %>%
-    right_join(., data.1, by = "PARID") %>%
-    filter(!is.na(LIVUNIT)) %>%
+  temp <- OWN %>%
+    rename(base.parid = PARID)
+ 
+  data.2 <- data.1 %>%
+    rename(year = saleyr) %>%
+    left_join(., temp, by = c("base.parid", "year"))%>%
+    #filter(!is.na(LIVUNIT))  %>%
     mutate(count = 1,
            owner = case_when(TENURE == "OWNER" ~ 1,
                              TRUE ~ 0),
@@ -64,5 +72,5 @@ for(yr in year){
   
 }
 
-
+save(core.nb, file = "./Build/Output/core.nb1_4.RData")
 
