@@ -4,6 +4,7 @@
 
 #Jeremy R. Groves
 #May 12, 2025
+#June 17, 2025: Updated with new variable names with redone OWN file
 
 #OUTPUT ./Build/Output/core.nbX_X.RData
 
@@ -14,7 +15,7 @@ library(tidyverse)
 load(file="./Build/Output/Sales.RData")
 load(file="./Build/Output/bufferlist1_4a.RData")
 
-year <- seq(2009,2023,1)
+year <- seq(2009,2024,1)
 
 #year <- 2009
 
@@ -24,46 +25,45 @@ for(yr in year){
     select(PARID, saleyr) %>%
     distinct() %>%
     rename(base.parid = PARID) %>%
-    left_join(., buffer.list, by="base.parid", relationship = "many-to-many") %>%
+    filter(saleyr == yr)  %>%
+    left_join(., buffer.list, by="base.parid")%>%
     filter(!is.na(PARID)) %>%
     filter(saleyr == yr)
   
   gc()
   
   load("./Build/Output/Own.RData")
-  
-  temp <- OWN %>%
-    rename(base.parid = PARID)
- 
+
   data.2 <- data.1 %>%
-    rename(year = saleyr) %>%
-    left_join(., temp, by = c("base.parid", "year"))%>%
-    #filter(!is.na(LIVUNIT))  %>%
+    rename(year = saleyr,
+           parid = PARID) %>%
+    left_join(., OWN, by = c("parid", "year")) %>%
+    filter(!is.na(key))  %>%
     mutate(count = 1,
-           owner = case_when(TENURE == "OWNER" ~ 1,
+           owner = case_when(tenure == "OWNER" ~ 1,
                              TRUE ~ 0),
            renter = 1 - owner,
-           inzip = case_when(OWN_ZIP == PROP_ZIP ~ 0,
+           inzip = case_when(co_zip == po_zip ~ 0,
                                TRUE ~ 1),
            outzip = 1 - inzip) %>%
     group_by(base.parid) %>%
-    aggregate(cbind(LIVUNIT, Corporate, Trustee, Bank, Muni, Nonprof, Hoa, private, 
+    aggregate(cbind(po_livunit, corporate, trustee, reown, muni, nonprofit, hoa, private, 
                     owner, renter, inzip, outzip, count) ~ 
                 base.parid, FUN = sum) %>%
-    mutate(LIVUNIT = LIVUNIT / count,
-           Corporate = Corporate / count,
-           Trustee = Trustee / count,
-           Bank = Bank / count,
-           Muni = Muni / count,
-           Nonprof = Nonprof / count,
-           Hoa = Hoa / count,
-           private = private / count,
-           owner = owner / count,
-           renter = renter / count,
-           inzip = inzip / count, 
-           outzip = outzip / count) %>%
+    mutate(n_livunit = po_livunit / count,
+           n_corporate = corporate / count,
+           n_trustee = trustee / count,
+           n_reown = reown / count,
+           n_muni = muni / count,
+           n_nonprofit = nonprofit / count,
+           n_hoa = hoa / count,
+           n_private = private / count,
+           n_owner = owner / count,
+           n_renter = renter / count,
+           n_inzip = inzip / count, 
+           n_outzip = outzip / count) %>%
     ungroup() %>%
-    rename(PARID = base.parid) %>%
+    rename(parid = base.parid) %>%
     mutate(year = yr)
   
   ifelse(yr == 2009,

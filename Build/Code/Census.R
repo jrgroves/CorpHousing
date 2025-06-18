@@ -1,11 +1,16 @@
 #Pulls ACS data using the ACS API. Right now only contains data from 2010 to 2023 due to ACS limitations
-#for data at the tract level.
-#This file needs the Owner Filter.R file to run first.
+#for data at the tract level. Then we use the xcoord and ycoord in the assessors data to intersect the OWN file
+#with the census tract maps and merge the census data with the owners data to create a core_own dataset.
+
+#This file needs the Owner Filter 2010.R file to run first.
 
 
 #Jeremy R. Groves
 #June 20, 2024
 #Updated: May 9, 2025
+#Updated: June 18, 2025: In this update I utilize the OWN file (specifically the one containing only 2010 to 2024) to intersect
+#                        the census tiger maps for the geocodes for the tracts. I use the x and y coords included in the data from
+#                        the assessor to avoid a problem with different parids between the GIS and the assessor files.
 
 rm(list=ls())
 
@@ -121,23 +126,33 @@ census <- ACS %>%
 
 save(census, file="./Build/Output/census.RData")
 rm(ACS, census, acs, TEMP, var, y, i, k)
-#Get ACS TIGER files for three census years and link to the 2025 Parcel map to have GEOIDs for each year ####
-    
-    loc<-st_read("F:/Data/Saint Louis GIS Data/gis_2025/Parcels_Current.shp")
 
-    parmap <- loc %>%
-      select(PARENT_LOC, LOCATOR, PROP_ADD, PROP_ZIP) %>%
-      st_centroid()
+#Get ACS TIGER files for three census years and link to the OWN Data ####
     
-    rm(loc)
+  load("./Build/Output/Own10.RData")    
   
-    parcel <- parmap %>%
-      st_drop_geometry() %>%
-      mutate(GEOID.00 = NA,
-             GEOID.10 = NA,
-             GEOID.20 = NA)
-    k<-5
-    y<-c(2009, 2010, 2020)
+  parcel <- OWN %>%
+    select(parid, xcoord, ycoord, year) %>%
+    mutate(xcoord = case_when(year <= 2023 ~ NA,
+                              TRUE ~ xcoord),
+           ycoord = case_when(year <= 2023 ~ NA,
+                              TRUE ~ ycoord))%>%
+    group_by(parid) %>%
+    fill(xcoord, .direction = "downup") %>%
+    fill(ycoord, .direction = "downup") %>%
+    ungroup()%>%
+    select(-year) %>%
+    distinct(parid, .keep_all = T) %>%
+    filter(!is.na(xcoord),
+           !is.na(ycoord)) %>%
+    mutate(#GEOID.00 = NA,
+           GEOID.10 = NA,
+           GEOID.20 = NA)   %>%
+    st_as_sf(coords = c("xcoord", "ycoord"), crs = 102696, remove = T) %>%
+    st_transform(crs = 4326)
+  
+  
+  y<-c(2010, 2020) #Removed 2009 since not using data pre-2010
     for(i in y){
       acs <- get_acs(geography = "tract",
                      variables = "C17002_001",
@@ -150,33 +165,36 @@ rm(ACS, census, acs, TEMP, var, y, i, k)
                mapyear = as.character(i)) %>%
         select(GEOID, mapyear)
   
-      parmap <- st_transform(parmap, st_crs(map)) #projects STL map to match CENSUS maps
+      parcel <- st_transform(parcel, st_crs(map)) #projects STL map to match CENSUS maps
     
-      temp <- st_intersects(map, parmap)
+      temp <- st_intersects(parcel, map)
+        temp[lengths(temp)==0] <- 999
+        
+        temp2 <- as.data.frame(temp) %>%
+          mutate(col.id = case_when(col.id == 999 ~ NA,
+                                  TRUE ~ col.id),
+          GEOID = map$GEOID[col.id])
       
-      for(i in seq(1, length(temp))){
-        parcel[,k] = replace(parcel[,k], temp[[i]], map$GEOID[i])
-      }
-      k<-k+1
+        ifelse(i==2010, parcel$GEOID.10<-temp2$GEOID, parcel$GEOID.20<-temp2$GEOID)
     }
-
-    save(parcel, file="./Build/Output/CenMap.RData")
-    load("./Build/Output/census.RData")
-    
-    p.map <- parcel %>%
-      mutate(PARID = LOCATOR) %>%
-      select("PARID", starts_with("GEOID")) %>%
-      slice(rep(1:n(), each = 12)) %>%
-      group_by(PARID) %>%
-      mutate(year = 1:n()) %>%
-      ungroup() %>%
-      mutate(year = as.numeric(year) + 2009,
-             GEOID = case_when(year < 2020 ~ GEOID.10,
-                               TRUE ~ GEOID.20)) %>%
-      select(PARID, year, GEOID) %>%
-      left_join(., census, by=c("GEOID", "year"))
-   
-  save(p.map, file="./Build/Output/par_cen.RData")  
+  
+  OWN1 <- parcel %>%
+    right_join(., OWN, by="parid") %>%
+    mutate(lon = st_coordinates(.)[,1],
+           lat = st_coordinates(.)[,2]) %>%
+    st_drop_geometry()
+  
+#Merge the Census Data with the correct Tracts in OWN data
+ load("./Build/Output/census.RData")
+ 
+ core_own <- OWN1 %>%
+   mutate(GEOID = case_when(year < 2019 ~ GEOID.10,
+                            TRUE ~ GEOID.20)) %>%
+   left_join(., census, by=c("GEOID", "year")) %>%
+   filter(!is.na(per_own)) %>%
+   select(-c(xcoord, ycoord, GEOID.10, GEOID.20))
+ 
+save(core_own, file="./Build/Output/core_own.RData")  
 
 
 
