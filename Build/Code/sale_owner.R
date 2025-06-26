@@ -11,28 +11,30 @@
 #Created: September 16, 2024
 #Updated: September 18, 2024
 #Updated: April 17, 2025: updated data and added visualization code.
+#Updated: June 18, 2025: updated to use only post-2009 Owner Data due to census restrictions
 
 rm(list=ls())
 
 library(tidyverse)
 
 load(file="./Build/Output/Sales.RData")
-load(file="./Build/Output/Own.RData")
+load(file="./Build/Output/Own10.RData") 
+load(file="./Build/Output/dwell.RData")
 
 #Create wide data of ownership tenure####
 
   own.ten <- OWN %>%
-    select(PARID, year, TENURE) %>%
-    pivot_wider(id_cols = PARID, 
+    select(parid, year, tenure) %>%
+    pivot_wider(id_cols = parid, 
                 names_from = year, 
                 names_prefix = "ten.",
-                values_from = TENURE)
+                values_from = tenure)
 
 #Create wide data of ownership corporate vs. private####
 
-  own.pri <- OWN%>%
-    select(PARID, year, private) %>%
-    pivot_wider(id_cols = PARID, 
+  own.pri <- OWN %>%
+    select(parid, year, private) %>%
+    pivot_wider(id_cols = parid, 
                 names_from = year, 
                 names_prefix = "priv.",
                 values_from = private)
@@ -41,12 +43,89 @@ load(file="./Build/Output/Own.RData")
 
   sold <- sales %>%
     select(PARID, saleyr, adj_price) %>%
-    mutate(presale = saleyr - 1,
-           postsale = saleyr + 1)
+    rename(parid = PARID) %>%
+    filter(saleyr > 2010) %>%
+    mutate(pre_sale = saleyr - 1,
+           post_sale = saleyr + 1) %>%
+  left_join(., dwelldat, by="parid", relationship = "many-to-many") %>%
+  filter(card == 1) %>%
+  relocate(parid, yrblt, saleyr) %>%
+  mutate(seller = case_when((saleyr - yrblt) < 2 ~ "BUILDER",
+                            TRUE ~ "OTHER")) %>%
+  select(parid, saleyr, adj_price, pre_sale, post_sale, yrblt, seller)
+
+
+  work <- sold %>%
+    left_join(., OWN, by=c("parid", "pre_sale"="year")) %>%
+    rename_with(~str_c("pre_", .), corporate:muni) %>%
+    rename(pre_tenure = tenure) %>%
+    mutate(pre_tenure = case_when(is.na(pre_tenure) & seller == "BUILDER" ~ "BUILDER",
+                                  TRUE ~ pre_tenure),
+           across(.cols = pre_corporate:pre_muni,
+                         ~ifelse(pre_tenure == "BUILDER",0, .)),
+           pre_trustee = case_when(pre_tenure == "BUILDER" ~ 1,
+                                   TRUE ~ pre_trustee )) %>%
+    select(parid, yrblt, saleyr, adj_price, post_sale, starts_with("pre_") ) %>%
+    filter(!is.na(pre_tenure))
+    
+  
+##There are about 331 cases with no initial address and the data does not exist on the website either. The tax data
+  #does not go back that far for the properties, even those sold after 2014. I removed these above
+  
+ 
+  
+  #Next we pull in the post_sale information
+  work1 <- work %>%
+    left_join(., OWN, by=c("parid", "post_sale"="year")) %>%
+    filter(post_sale != 2025)
+  
+  temp1 <- work1 %>%
+    filter(is.na(tenure)) %>%
+    distinct(parid, .keep_all = T) %>%
+    mutate(year = post_sale)
+    
+  temp2 <- OWN %>% 
+    filter(parid %in% temp1$parid) %>%
+    bind_rows(., temp1) %>%
+    arrange(parid, year) %>%
+    group_by(parid) %>%
+    fill(, .direction = "up") %>%   #NEED TO FILL ACROSS COLUMNS
+    ungroup()
+    
+    rename_with(~str_c("post_", .), corporate:muni) %>%
+    rename(post_tenure = tenure) %>%
+    select(parid, saleyr, adj_price, starts_with("pre_"), starts_with("post_")) %>%
+    filter(post_sale != 2025) #This removes about 7200 cases where the sale occurs in 2024 and we do not know the buyer.
+  
+
+  
+  
+  
+  
+  
+  %>%
+    group_by(parid) %>%
+    across(co_stradr:co_zip fill()
+  
+  
+  head(temp2
+       %>%
+    filter(!is.na(pre_tenure),
+           !is.na(post_tenure)) %>%
+    mutate(tenure = paste(pre_tenure, post_tenure, sep="_"))
+  
+
+  
+  
+  
+  
+  
+  
+  
 
   work <- sold %>%
     mutate(year = presale) %>%
-    left_join(., OWN, c("PARID", "year")) %>%
+    left_join(., OWN, c("parid", "year")) %>%
     mutate(PREOWN_CITY = as.character(OWN_CITY),
            PREOWN_STATE = as.character(OWN_STATE),
            PREOWN_ZIP = as.character(OWN_ZIP),

@@ -13,6 +13,8 @@
 #April 8, 2025: Added data up to 2024 EOY files. Also set to load off external drive for zip file extract. 
                 #Also removed parallel processing.
 #June 11, 2025: Added the clean strings command
+#June 19, 2025: Discovered Error in the read.csv code that was cutting short the ownership files. Also found that some
+#               parids have been changed over time.
 
 rm(list=ls())
 
@@ -101,7 +103,8 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
    for(i in y){
      #Post 2009 the owner and parcel data were merged into the same file
         pardat <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
-                             filename = "primary_parcel.csv"), sep = "|", header = TRUE, stringsAsFactors = FALSE)
+                             filename = "primary_parcel.csv"), sep = "|", header = TRUE, stringsAsFactors = FALSE,
+                           quote = "", row.names = NULL)
       
         colnames(pardat) <- gsub("\\.", "_", colnames(pardat))
       
@@ -117,7 +120,7 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                  po_city = clean_strings(TAX_CITY),
                  po_zip = clean_strings(TAX_ZIP),
                  po_livunit = as.numeric(LIVUNIT)) %>%
-          filter(co_stradr != "",
+          filter(#co_stradr != "",
                  #CLASS == "R",
                  !is.na(po_livunit),
                  po_livunit > 0) %>%
@@ -334,7 +337,7 @@ OWN1 <- OWN %>%
          po_zip = case_when(tenure == "OWNER" ~ co_zip,
                               TRUE ~ po_zip))
 
-#Fix missing property addresses, city, zips, and coordinants using obs from other years####
+#Fix missing property addresses, city, zips, and coordinators using obs from other years####
 
 OWN1 <- OWN1 %>%
   arrange(po_stradr, year) %>%
@@ -356,8 +359,9 @@ OWN1 <- OWN1 %>%
   temp1 <- read.csv(file="./build/output/temp1.csv")
 
   OWN1 <- OWN1 %>%
-    left_join(., temp1, by=c("parid", "po_stradr")) %>%
-    mutate(po_city = coalesce(po_city, fx_city),
+    left_join(., temp1, by=c("parid")) %>%
+    mutate(po_stradr = coalesce(po_stradr, fx_stradr),
+           po_city = coalesce(po_city, fx_city),
            po_zip = coalesce(po_zip, as.character(fx_zip)))
   
   #temp2 <- OWN1 %>%
@@ -365,7 +369,8 @@ OWN1 <- OWN1 %>%
   #                             TRUE ~ co_city),
   #         co_zip = case_when(tenure == "OWNER" ~ po_zip,
   #                            TRUE ~ co_zip) )%>%
-  #  filter(is.na(co_city) | is.na(co_state) | is.na(co_zip))
+  #  filter(is.na(co_city) | is.na(co_state) | is.na(co_zip)) %>%
+  #  distinct(parid, .keep_all = T)
   #write.csv(temp2, file = "./build/output/temp2.csv")
   temp2 <- read.csv(file="./build/output/temp2.csv")
   
@@ -378,7 +383,8 @@ OWN1 <- OWN1 %>%
 OWN <- OWN1 %>%
   mutate(po_zip = as.numeric(po_zip),
          co_zip = as.numeric(co_zip)) %>%
-  select(-c(zip, fx_city, fx_zip, fxc_city, fxc_state, fxc_zip, X)) %>%
+  select(-c(zip, fx_stradr, fx_city, fx_zip, fxc_city, fxc_state, fxc_zip)) %>%
+  filter(!is.na(xcoord)) %>% #drops 4 observations
   filter(po_stradr != "") %>%  #drops 11 observation 
   filter(!is.na(po_zip)) %>% #drops 9 observation 
   distinct(parid, year, .keep_all = TRUE)
