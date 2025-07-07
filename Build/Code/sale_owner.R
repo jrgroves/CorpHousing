@@ -47,126 +47,168 @@ load(file="./Build/Output/dwell.RData")
     filter(saleyr > 2010) %>%
     mutate(pre_sale = saleyr - 1,
            post_sale = saleyr + 1) %>%
-  left_join(., dwelldat, by="parid", relationship = "many-to-many") %>%
-  filter(card == 1) %>%
-  relocate(parid, yrblt, saleyr) %>%
-  mutate(seller = case_when((saleyr - yrblt) < 2 ~ "BUILDER",
-                            TRUE ~ "OTHER")) %>%
-  select(parid, saleyr, adj_price, pre_sale, post_sale, yrblt, seller)
+    left_join(., dwelldat, by="parid", relationship = "many-to-many") %>%
+    filter(card == 1) %>%
+    relocate(parid, yrblt, saleyr) %>%
+    mutate(seller = case_when((saleyr - yrblt) < 2 ~ "BUILDER",
+                              TRUE ~ "OTHER")) %>%
+    select(parid, saleyr, adj_price, pre_sale, post_sale, yrblt, seller)
 
+#Merge the cleaned sales data with the OWN data to find pre-sale owner information
 
   work <- sold %>%
     left_join(., OWN, by=c("parid", "pre_sale"="year")) %>%
+    select(-c(key, fxc_stradr)) %>% #Remove unneeded columns
     rename_with(~str_c("pre_", .), corporate:muni) %>%
     rename(pre_tenure = tenure) %>%
     mutate(pre_tenure = case_when(is.na(pre_tenure) & seller == "BUILDER" ~ "BUILDER",
                                   TRUE ~ pre_tenure),
            across(.cols = pre_corporate:pre_muni,
                          ~ifelse(pre_tenure == "BUILDER",0, .)),
-           pre_trustee = case_when(pre_tenure == "BUILDER" ~ 1,
-                                   TRUE ~ pre_trustee )) %>%
-    select(parid, yrblt, saleyr, adj_price, post_sale, starts_with("pre_") ) %>%
-    filter(!is.na(pre_tenure))
-    
+                                 pre_trustee = case_when(pre_tenure == "BUILDER" ~ 1,
+                                 TRUE ~ pre_trustee ))
   
-##There are about 331 cases with no initial address and the data does not exist on the website either. The tax data
-  #does not go back that far for the properties, even those sold after 2014. I removed these above
+  #Need to pull in property city, zip, living unit, and coordinates from other installments in OWN data for new construction
   
- 
+  temp1 <- work %>%
+    filter(is.na(po_zip)) %>%
+    distinct(parid)
   
+  temp2 <- OWN %>%
+    filter(parid %in% temp1$parid) %>%
+    filter(!is.na(po_zip)) %>%
+    select(parid, starts_with("po_"), class, xcoord, ycoord) %>%
+    distinct(parid, .keep_all = TRUE) %>%
+    rename_with(~str_c("fix_", .), po_stradr:ycoord)
+  
+  #Put back the elements with the missing values
+  
+  work <- work %>%
+    relocate(xcoord, ycoord, .after = class) %>%
+    left_join(., temp2, by="parid") %>%
+    mutate(across(po_stradr:ycoord, ~ coalesce(.x, get(paste('fix',cur_column(),sep = '_'))) )) %>%
+    select(-starts_with("fix_")) %>%
+    filter(!is.na(po_zip)) %>% #removes three observations with no data on property
+    filter(!is.na(pre_tenure)) %>%
+    rename_with(~str_c("pre_", .), co_city:co_zip)
+  
+  #There are 72 observations where the owner zip and address are missing, but name is present. 
+      #This code need not be run more than once and it fixes the missing ownership data with external file.
+      #temp.pre.own <- work %>%
+      #  filter(is.na(pre_co_zip)) %>%
+      #  filter(seller != "BUILDER")
+      
+      #write.csv(temp.pre.own, file="./Build/Input/temp_pre_own.csv")
+      temp.pre.own <- read.csv(file="./Build/Input/temp_pre_own.csv", header = TRUE, as.is = TRUE)
+      
+      work <- work %>%
+        left_join(., temp.pre.own, by = c("parid", "saleyr"), relationship = "many-to-many") %>%
+        mutate(pre_co_city = na_if(pre_co_city, ""),
+               pre_co_state = na_if(pre_co_state, ""),
+               across(pre_co_city:pre_co_zip, ~coalesce(.x, get(paste('fix',cur_column(),sep = '_'))))) %>%
+        select(-starts_with("fix_")) %>%
+        distinct() %>%
+        select(parid, starts_with("po_"), yrblt, saleyr, adj_price, post_sale, starts_with("pre_"))
+
+  ##There are about 322 cases with no initial address and the data does not exist on the website either. The tax data
+  #does not go back that far for the properties, even those sold after 2014. I removed these above. Additionally,
+  #properties with a BUILDER have no co_zip at this point.
+  
+
   #Next we pull in the post_sale information
   work1 <- work %>%
     left_join(., OWN, by=c("parid", "post_sale"="year")) %>%
-    filter(post_sale != 2025)
+    filter(post_sale != 2025) %>%
+    select(-fxc_stradr)
   
-  temp1 <- work1 %>%
-    filter(is.na(tenure)) %>%
-    distinct(parid, .keep_all = T) %>%
-    mutate(year = post_sale)
-    
-  temp2 <- OWN %>% 
-    filter(parid %in% temp1$parid) %>%
-    bind_rows(., temp1) %>%
-    arrange(parid, year) %>%
-    group_by(parid) %>%
-    fill(, .direction = "up") %>%   #NEED TO FILL ACROSS COLUMNS
-    ungroup()
-    
-    rename_with(~str_c("post_", .), corporate:muni) %>%
-    rename(post_tenure = tenure) %>%
-    select(parid, saleyr, adj_price, starts_with("pre_"), starts_with("post_")) %>%
-    filter(post_sale != 2025) #This removes about 7200 cases where the sale occurs in 2024 and we do not know the buyer.
+    #There are 907 cases of missing data
   
-
+        temp1 <- work1 %>%
+          filter(is.na(tenure)) %>%
+          distinct(parid, post_sale, .keep_all = T) %>%
+          mutate(year = post_sale) %>%
+          arrange(parid, year)
   
+    #I am able to fill the missing owner data by using the next in the sequence
+        
+        temp2 <- OWN %>% 
+          filter(parid %in% temp1$parid)  %>%
+          select(-fxc_stradr) %>%
+          bind_rows(., temp1) %>%
+          arrange(parid, year) %>%
+          group_by(parid) %>%
+              fill(., c(co_stradr:key), .direction = "up") %>%   #NEED TO FILL ACROSS COLUMNS
+          ungroup() %>%
+          filter(!is.na(key)) %>% #One observations still missing information
+          filter(post_sale != 2025) #This removes about 7200 cases where the sale occurs in 2024 and we do not know the buyer.
+        
+    #Rejoin the filled data with the original work after removing the elements in temp1
   
-  
-  
-  
-  %>%
-    group_by(parid) %>%
-    across(co_stradr:co_zip fill()
-  
-  
-  head(temp2
-       %>%
-    filter(!is.na(pre_tenure),
-           !is.na(post_tenure)) %>%
-    mutate(tenure = paste(pre_tenure, post_tenure, sep="_"))
-  
-
-  
-  
-  
-  
-  
-  
-  
-
-  work <- sold %>%
-    mutate(year = presale) %>%
-    left_join(., OWN, c("parid", "year")) %>%
-    mutate(PREOWN_CITY = as.character(OWN_CITY),
-           PREOWN_STATE = as.character(OWN_STATE),
-           PREOWN_ZIP = as.character(OWN_ZIP),
-           PREOWN_TENURE = as.character(TENURE),
-           PREOWN_Private = as.character(private)) %>%
-    select(PARID, saleyr, presale, postsale, starts_with("PRE"), adj_price)
-  
-  work <- work %>%
-    mutate(year = postsale) %>%
-    left_join(., OWN, c("PARID", "year")) %>%
-    mutate(POSTOWN_CITY = as.character(OWN_CITY),
-           POSTOWN_STATE = as.character(OWN_STATE),
-           POSTOWN_ZIP = as.character(OWN_ZIP),
-           POSTOWN_TENURE = as.character(TENURE),
-           POSTOWN_Private = as.character(private)) %>%
-    select(PARID, saleyr, presale, postsale, starts_with("PRE"), starts_with("POST"), adj_price)
-  
-    #NOTE that there are about 32000 observations, especially with more recent sales, that do not show up in owner
-    #data for some reason.
+        work1 <- work1 %>%
+          filter(!is.na(tenure)) %>%
+          bind_rows(., temp2) %>%
+          distinct() %>%
+          mutate(ID = row_number())
+     
+        
+        ##THis is where you stopped see notes for what to do.
+        
+           
+    #There are 214 observations where the owner zip and address are missing, but name is present. 
+    #This code need not be run more than once and it fixes the missing ownership data with external file.
+        #temp.post.own <- work1 %>%
+        #  relocate(ID) %>%
+        #  mutate(co_city = na_if(co_city, ""),
+        #         co_state = na_if(co_state, "")) %>%
+        #  filter(is.na(co_city)) 
+        
+        #write.csv(temp.post.own, file="./Build/Input/temp_post_own.csv")
+        temp.post.own <- read.csv(file="./Build/Input/temp_post_own.csv", header = TRUE, as.is = TRUE)
+        
+        work <- work1 %>%
+          left_join(., temp.post.own, by = c("parid", "ID", "post_sale")) %>%
+          mutate(co_city = na_if(co_city, ""),
+                 co_state = na_if(co_state, ""))
+        
+        
+        
+                 across(co_city:co_zip, ~coalesce(.x, get(paste('fix',cur_column(),sep = '_'))))) %>%
+          select(-starts_with("fix_")) %>%
+          distinct() %>%
+          select(-starts_with("po_"), -class, -xcoord, -ycoord) %>%
+          rename_with(~str_c("post_", .), co_city:muni) %>%
+          select(parid, starts_with("po_"), yrblt, saleyr, adj_price, starts_with("pre_"), starts_with("post_")) %>%
+          filter(!is.na(post_co_zip))   #Drops 5 observations
+        
+#Now we create the working variables
 
     core <- work %>%
-      filter(!is.na(PREOWN_TENURE)) %>%
-      filter(!is.na(POSTOWN_TENURE)) %>%
-      mutate(ten = as.numeric(PREOWN_TENURE!=POSTOWN_TENURE),
-             ten1 = case_when(PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "NOT OWNER" ~ 1,
-                              PREOWN_TENURE == "OWNER" & POSTOWN_TENURE == "NOT OWNER" ~ 2,
-                              PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "OWNER" ~ 3,
-                              is.na(PREOWN_TENURE) & !is.na(POSTOWN_TENURE) ~ 5, #this is the case where a property shows up after sale (none exist)
-                              !is.na(PREOWN_TENURE) & is.na(POSTOWN_TENURE) ~ 6,
-                              TRUE ~ 4),  #this is owner sold to owner
-             city = as.numeric(PREOWN_CITY != POSTOWN_CITY),
-             state = as.numeric(PREOWN_STATE != POSTOWN_STATE),
-             zip = as.numeric(PREOWN_ZIP != POSTOWN_ZIP),
+      filter(!is.na(pre_tenure)) %>%
+      filter(!is.na(post_tenure)) %>%
+      mutate(ten = as.numeric(pre_tenure != post_tenure),
+             ten1 = case_when(pre_tenure == "BUILDER" & post_tenure == "NONOWNER" ~ 1,
+                              pre_tenure == "NONOWNER" & post_tenure == "NONOWNER" ~ 1,
+                              pre_tenure == "OWNER" & post_tenure == "NONOWNER" ~ 2,
+                              pre_tenure == "NONOWNER" & post_tenure == "OWNER" ~ 3,
+                              pre_tenure == "BUILDER" & post_tenure == "OWNER" ~ 3,
+                              TRUE ~ 4), #This is owner to owner transactions
+             new_con = case_when(pre_tenure == "BUILDER" ~ 1,
+                                 TRUE ~ 0),
+             city = as.numeric(pre_co_city != post_co_city),
+             state = as.numeric(pre_co_state != post_co_state),
+             zip = as.numeric(pre_co_zip != post_co_zip))
+    
+    
+    
+    ,
              P2C = ifelse(PREOWN_Private == 1 & POSTOWN_Private == 0, 1, 0),
              P2P = ifelse(PREOWN_Private == 1 & POSTOWN_Private == 1, 1, 0),
              C2C = ifelse(PREOWN_Private == 0 & POSTOWN_Private == 0, 1, 0),
              C2P = ifelse(PREOWN_Private == 0 & POSTOWN_Private == 1, 1, 0),
-             N2O = ifelse(PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "OWNER",1,0),
-             N2N = ifelse(PREOWN_TENURE == "NOT OWNER" & POSTOWN_TENURE == "NOT OWNER",1,0),
-             O2O = ifelse(PREOWN_TENURE == "OWNER" & POSTOWN_TENURE == "OWNER",1,0),
-             O2N = ifelse(PREOWN_TENURE == "OWNER" & POSTOWN_TENURE == "NOT OWNER",1,0),
+             N2O = ifelse(pre_tenure == "NONOWNER" & post_tenure == "OWNER",1,0),
+             N2N = ifelse(pre_tenure == "NONOWNER" & post_tenure == "NONOWNER",1,0),
+             O2O = ifelse(pre_tenure == "OWNER" & post_tenure == "OWNER",1,0),
+             O2N = ifelse(pre_tenure == "OWNER" & post_tenure == "NONOWNER",1,0),
              trans.own = case_when(P2C == 1 ~ "Private to Corporate",
                                    P2P == 1 ~ "Private to Private",
                                    C2C == 1 ~ "Corporate to Corporate",
@@ -177,15 +219,15 @@ load(file="./Build/Output/dwell.RData")
                                        C2C == 1 ~ "Corporate",
                                        C2P == 1 ~ "Private",
                                        TRUE ~ "Unknown"),
-             trans.ten = case_when(N2O == 1 ~ "Not Owner to Owner",
-                                   N2N == 1 ~ "Not Owner to Not Owner",
+             trans.ten = case_when(N2O == 1 ~ "NONOWNER to Owner",
+                                   N2N == 1 ~ "NONOWNER to NONOWNER",
                                    O2O == 1 ~ "Owner to Owner",
-                                   O2N == 1 ~ "Owner to Not Owner",
+                                   O2N == 1 ~ "Owner to NONOWNER",
                                    TRUE ~ "Unknown"),
              trans.end.ten = case_when(N2O == 1 ~ "Owner",
-                                       N2N == 1 ~ "Not Owner",
+                                       N2N == 1 ~ "NONOWNER",
                                        O2O == 1 ~ "Owner",
-                                       O2N == 1 ~ "Not Owner",
+                                       O2N == 1 ~ "NONOWNER",
                                        TRUE ~ "Unknown")) %>%
       filter(adj_price < 2500000)
     
