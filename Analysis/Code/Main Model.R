@@ -8,75 +8,57 @@ rm(list = ls())
 
 library(tidyverse)
 
-#Load Key Data
- load("./Build/Output/sal_own.RData")
- load("./Build/Output/par_cen.RData")
- load("./Build/Output/core.nb1_4.RData")
+#Load Key Data and build core
+ load("./Build/Output/core_cen.RData")     #core_cen; contains sale owner and census data
+ load("./Build/Output/core_1320.RData")    #core2
+ 
+ temp <- core2 %>%
+   select(ID, neighbors, starts_with("nb"))
+ 
+ core <- core_cen %>%
+   left_join(., temp, by = "ID") %>%
+   select(-cen_yr, -year) %>%
+   filter(!is.na(neighbors))  #removes 20 observations from main data
+ 
+ rm(core_cen, core2, temp)
 
 #Repeat Sale Version
  
-  rs <- core %>%
-    filter(saleyr > 2009) %>% #To accommodate census data limits
-    #First we filter out to keep only multiple sale properties and limit to one sale per year.
-    arrange(PARID, saleyr) %>%
-    add_count(PARID, saleyr, sort = TRUE) %>%
-    filter(n == 1) %>%
-    select(-n) %>%
-    add_count(PARID) %>%
-    filter(n > 1)
+  rs_core <- core %>%
+    filter(n > 1) 
+  #Add Year Sales Dummy
+    temp <- rs_core %>%
+      mutate(d_year = as.character(saleyr))%>%
+      select(d_year) 
+        
+    t <- model.matrix(~d_year - 1, temp)
+        
+    rs_core <- rs_core %>%
+      bind_cols(t)
+    rm(t, temp)  
+    
+  #Difference between sales
+    rs_core2 <- rs_core %>%
+      arrange(parid, saleyr) %>%
+      group_by(parid) %>%
+        mutate(
+               ln_price = log(adj_price),
+               adj_price = lead(adj_price) - adj_price,
+               ln_price = lead(ln_price) - ln_price,
+               across(nb_livunit:d_year2023, ~lead(.x) - .x)) %>%
+      ungroup() %>%
+      filter(!is.na(adj_price)) %>%
+      select(adj_price, ln_price, starts_with("nb_"), new_con, N2O, N2N, O2O, O2N, P2C, P2P, C2C, C2P, trans.own, ten1,
+             starts_with("d_")) %>%
+      select(-nb_livunit)
+    
+  #Visualizations
+    plot1 <- ggplot(rs_core2,  aes(factor(ten1), ln_price, fill=factor(trans.own))) +
+      geom_boxplot()
   
-  t <- rs %>%
-    select(saleyr) %>%
-    mutate(saleyr = as.character(saleyr)) %>%
-    model.matrix(~. -1,.) %>%
-    as.data.frame()
-  
-  rs2 <- rs %>%
-    cbind(., t)%>%
-    #Now we removed unneeded columns
-    select(-c(presale, postsale, starts_with("PREOWN_"), starts_with("POSTOWN_"))) %>%
-    #Calculate the change in price between sales
-    group_by(PARID) %>%
-    arrange(PARID, saleyr) %>%
-    mutate(ln_adj_price = log(adj_price),
-           delta_p = ln_adj_price - lag(ln_adj_price),
-           delta_syr2010 = saleyr2010 - lag(saleyr2010),
-           delta_syr2011 = saleyr2011 - lag(saleyr2011),
-           delta_syr2012 = saleyr2012 - lag(saleyr2012),
-           delta_syr2013 = saleyr2013 - lag(saleyr2013),
-           delta_syr2014 = saleyr2014 - lag(saleyr2014),
-           delta_syr2015 = saleyr2015 - lag(saleyr2015),
-           delta_syr2016 = saleyr2016 - lag(saleyr2016),
-           delta_syr2017 = saleyr2017 - lag(saleyr2017),
-           delta_syr2018 = saleyr2018 - lag(saleyr2018),
-           delta_syr2019 = saleyr2019 - lag(saleyr2019),
-           delta_syr2020 = saleyr2020 - lag(saleyr2020),
-           delta_syr2021 = saleyr2021 - lag(saleyr2021),
-           delta_syr2022 = saleyr2022 - lag(saleyr2022),
-           delta_syr2023 = saleyr2023 - lag(saleyr2023)) %>%
-    ungroup() %>%
-    left_join(., core.nb, by = c("PARID", "saleyr" = "year")) %>%
-    filter(!is.na(delta_syr2010),
-           !is.na(count))
-  
-  
-  
-  mod1 <- lm(delta_p ~ P2C + C2C + C2P + N2O + N2N + O2N +
-              LIVUNIT + Corporate + Trustee + Bank + Muni + Nonprof +
-               owner + outzip + delta_syr2010 + delta_syr2011 +
-               delta_syr2012 + delta_syr2013 + delta_syr2014 +
-               delta_syr2015 + delta_syr2016 + delta_syr2017 +
-               delta_syr2018 + delta_syr2019 + delta_syr2020 +
-               delta_syr2021 + delta_syr2022, data=rs2)
- 
-mod2 <- lm(delta_p ~ P2C + C2C + C2P + N2O + N2N + O2N +
-             P2C*N2O + P2C*N2N + P2C*O2N + C2P*N2O + C2P*N2N + C2P*O2N + 
-             C2C*N2O + C2C*N2N + C2C*O2N + 
-             LIVUNIT + Corporate + Trustee + Bank + Muni + Nonprof +
-             owner + outzip + delta_syr2010 + delta_syr2011 +
-             delta_syr2012 + delta_syr2013 + delta_syr2014 +
-             delta_syr2015 + delta_syr2016 + delta_syr2017 +
-             delta_syr2018 + delta_syr2019 + delta_syr2020 +
-             delta_syr2021 + delta_syr2022, data=rs2)
-
-
+  #Model 1  
+      
+    mod1 <- lm(ln_price ~ ., data = select(rs_core2, ln_price, new_con, O2N, N2N, N2O, starts_with("d_")))
+    mod2 <- lm(ln_price ~ ., data = select(rs_core2, ln_price, new_con, P2C, C2P, C2C, starts_with("d_")))
+    
+    

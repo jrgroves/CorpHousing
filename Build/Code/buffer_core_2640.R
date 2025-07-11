@@ -1,4 +1,4 @@
-#This script creates one-quarter mile buffers around each of the properties in the sold data frame 
+#This script creates one-half mile buffers around each of the properties in the sold data frame 
 #using the 2025 parcel map from STL based on centroids created by the *sf* package. It then merges with the map
 #shapefile to determine non-residential uses and then with OWN data frame for ownership of residential parcels.
 #The data is aggregated and then saved as core1032 to denote the one-quarter mile. This file is a modified version of
@@ -42,7 +42,7 @@ library(sf)
     st_as_sf(., sf_column_name = "geometry") %>%
     st_make_valid() %>%
     st_centroid() %>%
-    st_buffer(., 1320) %>%
+    st_buffer(., 2640) %>%
     st_intersects(., loc.cen)
   #Change the names in the list with the parcel ids
     names(buffer) <- working$parid
@@ -50,7 +50,7 @@ library(sf)
     df <- enframe(buffer) %>%
       mutate(n = lengths(value))
   #Now unnest the tibble and create a data frame with the base observation from the core data and all of its neighbors
-    buffer_1320 <- df %>%
+    buffer_2640 <- df %>%
       unnest(., value)  %>%
       left_join(., loc.cen, by=c("value" = "ID")) %>%
       st_drop_geometry() %>%
@@ -60,13 +60,13 @@ library(sf)
       filter(!is.na(PROPCLASS)) #This drops about 30K cases which related to only about 381 parcel ids that are mostly
                                 #in error, have the prefix PL or OL which do not show up in records, or 2025 properties.
   #Housekeeping
-    rm(df, buffer)
+    rm(df, buffer, working, loc, loc.cen)
     gc()
     
 #Combine the buffer list with the year of sale so we can get the right ownership information for the neighbors
     working <- core %>%
       select(parid, saleyr) %>%
-      left_join(., buffer_1320, by=c("parid" = "base.parid"), relationship = "many-to-many") %>%
+      left_join(., buffer_2640, by=c("parid" = "base.parid"), relationship = "many-to-many") %>%
       filter(!is.na(PROPCLASS)) %>% #Removes 20 cases; likely same as above in core with no match on map.
       left_join(., own, by=c("neigh.parid" = "parid", "saleyr" = "year"))  %>%
       mutate(
@@ -100,7 +100,7 @@ library(sf)
     left_join(., working, by=c("parid", "saleyr")) %>%
     filter(!is.na(neighbors))
 
-  save(core2, file="./Build/Output/core_1320.RData")
+  save(core2, file="./Build/Output/core_2640.RData")
 
     
     
