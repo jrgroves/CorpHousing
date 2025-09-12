@@ -227,7 +227,7 @@ save(census, file="./Build/Output/census.RData")
    filter(year != 2024)
  
 save(cen_own, file="./Build/Output/core_own.RData")  
-  rm(census, i, own, OWN, own1, own2, OWN1)
+  rm(i, own, OWN, own1, own2, OWN1)
 
 #Get ACS TIGER files for three census years and link to the OWN Data ####
 

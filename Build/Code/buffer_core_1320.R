@@ -44,11 +44,16 @@ library(sf)
     st_centroid() %>%
     st_buffer(., 1320) %>%
     st_intersects(., loc.cen)
+  
   #Change the names in the list with the parcel ids
     names(buffer) <- working$parid
+    
+    
   #Turn the list to a nested tibble
     df <- enframe(buffer) %>%
       mutate(n = lengths(value))
+    
+    
   #Now unnest the tibble and create a data frame with the base observation from the core data and all of its neighbors
     buffer_1320 <- df %>%
       unnest(., value)  %>%

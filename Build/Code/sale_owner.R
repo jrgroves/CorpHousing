@@ -111,7 +111,7 @@ load(file="./Build/Output/dwell.RData")
      
       #write.csv(temp.pre.own, file="./Build/Input/temp_pre_own.csv")
       
-      temp.pre.own <- read.csv(file="./Build/Input/temp_pre_own.csv", header = TRUE, as.is = TRUE)
+      temp.pre.own <- read.csv(file="./Build/Input/temp_pre_own.csv", header = TRUE)
       
           #We make a sub list of the manually added information to tack onto bottom of the own dataframe
           temp <- temp.pre.own %>%
@@ -128,9 +128,10 @@ load(file="./Build/Output/dwell.RData")
       
       #Read in the text file and use to filling mising values
       temp.pre.own <- select(temp.pre.own, -co_name)
-      
+      rm(work)
       work <- work1 %>%
         left_join(., temp.pre.own, by = c("parid", "ID")) %>%
+        mutate(fix_pre_co_zip = as.numeric(fix_pre_co_zip)) %>%
         mutate(across(pre_co_city:pre_co_zip, ~coalesce(.x, get(paste('fix',cur_column(),sep = '_'))))) %>%
         select(-starts_with("fix_"))  %>%
         select(parid, starts_with("po_"), yrblt, saleyr, adj_price, post_sale, starts_with("pre_"))
@@ -194,6 +195,7 @@ load(file="./Build/Output/dwell.RData")
         
         work1 <- work2 %>%
           left_join(., temp.post.own, by = c("parid", "ID")) %>%
+          mutate(fix_post_co_zip = as.numeric(fix_post_co_zip)) %>%
           mutate(across(post_co_city:post_co_zip, ~coalesce(.x, get(paste('fix',cur_column(),sep = '_'))))) %>%
           select(-starts_with("fix_")) %>%
           filter(!is.na(corporate)) %>%  #this removes 27 items where the post tenure type is missing
@@ -209,8 +211,7 @@ load(file="./Build/Output/dwell.RData")
       filter(!is.na(post_tenure)) %>%
       mutate(
         #First we create a variable tracking a change in tenure at the sale
-        ten = as.numeric(pre_tenure != post_tenure),
-        
+             ten = as.numeric(pre_tenure != post_tenure),
         #Next we define the change type
              ten1 = case_when(pre_tenure == "BUILDER" & post_tenure == "NONOWNER" ~ 1,
                               pre_tenure == "NONOWNER" & post_tenure == "NONOWNER" ~ 1,
@@ -218,6 +219,8 @@ load(file="./Build/Output/dwell.RData")
                               pre_tenure == "NONOWNER" & post_tenure == "OWNER" ~ 3,
                               pre_tenure == "BUILDER" & post_tenure == "OWNER" ~ 3,
                               TRUE ~ 4), #This is owner to owner transactions
+             ten1 = factor(ten1, levels = c(1, 2, 3, 4), labels = c("Nonowner to Nonowner", "Owner to Nonowner",
+                                                                    "Nonowner to Owner", "Owner to Owner")),
         #This creates an indicator for the homes of new construction
              new_con = case_when(pre_tenure == "BUILDER" ~ 1,
                                  TRUE ~ 0),
@@ -239,8 +242,8 @@ load(file="./Build/Output/dwell.RData")
                                   TRUE ~ "Unknown"),
         #This creates a set of indicators to identify moves from owner to non-owner and combinations thereof.
         #Builders are considered non-owners
-             N2O = ifelse(pre_tenure == "NONOWNER" | pre_tenure=="BUILDER" & post_tenure == "OWNER",1,0),
-             N2N = ifelse(pre_tenure == "NONOWNER" | pre_tenure=="BUILDER" & post_tenure == "NONOWNER",1,0),
+             N2O = ifelse(pre_tenure == "NONOWNER" & post_tenure == "OWNER" | pre_tenure=="BUILDER" & post_tenure == "OWNER",1,0),
+             N2N = ifelse(pre_tenure == "NONOWNER" & post_tenure == "NONOWNER" | pre_tenure=="BUILDER" & post_tenure == "NONOWNER",1,0),
              O2O = ifelse(pre_tenure == "OWNER" & post_tenure == "OWNER",1,0),
              O2N = ifelse(pre_tenure == "OWNER" & post_tenure == "NONOWNER",1,0),
         #This creates a text label for the transactions between owner and non-owner

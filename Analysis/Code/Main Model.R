@@ -7,6 +7,7 @@
 rm(list = ls())
 
 library(tidyverse)
+library(gtsummary)
 
 #Load Key Data and build core
  load("./Build/Output/core_cen.RData")     #core_cen; contains sale owner and census data
@@ -21,6 +22,7 @@ library(tidyverse)
    filter(!is.na(neighbors))  #removes 20 observations from main data
  
  rm(core_cen, core2, temp)
+ 
 
 #Repeat Sale Version
  
@@ -37,28 +39,71 @@ library(tidyverse)
       bind_cols(t)
     rm(t, temp)  
     
-  #Difference between sales
+  #Difference between sales of properties.
     rs_core2 <- rs_core %>%
       arrange(parid, saleyr) %>%
+      mutate(ln_price = log(adj_price)) %>%
       group_by(parid) %>%
-        mutate(
-               ln_price = log(adj_price),
-               adj_price = lead(adj_price) - adj_price,
-               ln_price = lead(ln_price) - ln_price,
-               across(nb_livunit:d_year2023, ~lead(.x) - .x)) %>%
+      mutate(
+        d_adj_price = adj_price - lag(adj_price),
+        d_ln_price = ln_price - lag(ln_price),
+        d_nb_corporate = nb_corporate - lag(nb_corporate),
+        d_nb_corporate2 = d_nb_corporate^2,
+        from = lag(pre_tenure),
+        to = post_tenure,
+        across(per_own:d_year2023, ~.x - lag(.x))) %>%
       ungroup() %>%
-      filter(!is.na(adj_price)) %>%
-      select(adj_price, ln_price, starts_with("nb_"), new_con, N2O, N2N, O2O, O2N, P2C, P2P, C2C, C2P, trans.own, ten1,
-             starts_with("d_")) %>%
-      select(-nb_livunit)
+      filter(!is.na(d_adj_price),
+             !is.infinite(d_ln_price),
+             from != "BUILDER",
+             d_adj_price > -200000 & d_adj_price < 200000,
+             d_nb_corporate > -.40) %>%
+      select(d_ln_price, d_adj_price, d_nb_corporate,  starts_with("per_"), N2N, N2O, O2N, O2O,
+             P2P, P2C, C2P, C2C, ten1, trans.own, starts_with("d_"),) 
     
+ # tabs<-list(    
+    table1 <- tbl_summary(rs_core2,
+                         by  = ten1,
+                         include = -c(trans.own, N2N, N2O, O2O, O2N, P2P, P2C, C2P, C2C, d_year2023,
+                                      d_nb_corporate2),
+                         digits = list(all_continuous() ~ c(4,4),
+                                       d_adj_price ~ c(0,2),
+                                       all_categorical() ~ c(2,0)),
+                         statistic = list(all_continuous() ~ "{mean} ({sd})",
+                                          all_categorical() ~ "{p}% {n}")) %>%
+      remove_row_type(type = "level", level_value = "0")%>%
+      modify_header(all_stat_cols() ~ "**{level}**")
+    
+    
+    
+    table2 <- tbl_summary(rs_core2,
+                         by  = trans.own,
+                         include = -c(ten1, N2N, N2O, O2O, O2N, P2P, P2C, C2P, C2C, d_year2023,
+                                      d_nb_corporate2),
+                         digits = list(all_continuous() ~ c(4,4),
+                                       d_adj_price ~ c(0,2),
+                                       all_categorical() ~ c(2,0)),
+                         statistic = list(all_continuous() ~ "{mean}({sd})",
+                                          all_categorical() ~ "{p}% {n}")) %>%
+      remove_row_type(type = "level", level_value = "0") %>%
+      modify_header(all_stat_cols() ~ "**{level}**")
+
+ 
+  
+#  lapply(tabs, as_tibble) %>%
+#   openxlsx::write.xlsx(file = "./tables.xlsx")
+  
   #Visualizations
-    plot1 <- ggplot(rs_core2,  aes(factor(ten1), ln_price, fill=factor(trans.own))) +
+    plot1 <- ggplot(rs_core2,  aes(factor(trans.own), d_nb_corporate)) +
       geom_boxplot()
   
-  #Model 1  
-      
-    mod1 <- lm(ln_price ~ ., data = select(rs_core2, ln_price, new_con, O2N, N2N, N2O, starts_with("d_")))
-    mod2 <- lm(ln_price ~ ., data = select(rs_core2, ln_price, new_con, P2C, C2P, C2C, starts_with("d_")))
+  mod.core1 <- rs_core2 %>%
+    select(-c(d_adj_price, ten1, N2N, N2O, O2O, O2N, P2P, P2C, C2P, C2C, d_year2023,
+              d_nb_corporate2, trans.own, per_oth))
     
-    
+    mod1 <- lm(d_ln_price ~ ., data=mod.core1)
+    tbl_regression(mod1,
+                   intercept = TRUE,
+                   estimate_fun = label_style_number(digits = 3)) %>%
+      add_significance_stars()
+  
