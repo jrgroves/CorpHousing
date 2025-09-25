@@ -53,6 +53,7 @@ library(sf)
     df <- enframe(buffer) %>%
       mutate(n = lengths(value))
     
+    save(df, file = "./Build/Input/neighbor.RData")
     
   #Now unnest the tibble and create a data frame with the base observation from the core data and all of its neighbors
     buffer_1320 <- df %>%
@@ -83,6 +84,7 @@ library(sf)
         nonzip = ifelse(is.na(nonzip), 0, nonzip),
         owner = ifelse(tenure == "OWNER", 1, 0),
         owner = ifelse(is.na(owner), 0, owner),
+        nonowner = ifelse(owner == 1, 0, 1),
         prop_agg = ifelse(PROPCLASS == "A", 1, 0),
         prop_com = case_when(PROPCLASS == "C" ~ 1,
                              PROPCLASS == "Y" ~ 1,
