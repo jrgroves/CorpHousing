@@ -16,146 +16,128 @@ library(gt)
   source("./Analysis/Code/Function/rep.sale.R")
 
 #Build Repeat Sales Data
+
+  temp <- core %>%
+    select(parid, saleyr, starts_with("RP5"), starts_with("RP8")) %>%
+    distinct()
+  
   #Merge the sales and census data with the Wang neighbor files
   working <- core_cen %>%
-    left_join(., wang5, by = c("parid" = "name", "saleyr")) %>%
-    left_join(., wang8, by = c("parid" = "name", "saleyr")) %>%
-    filter(!is.na(sales.x)) %>%
-    select(parid, yrblt, saleyr, adj_price, starts_with("pre_"), starts_with("post_"), 
-                
+    left_join(., temp, by = c("parid", "saleyr"))  %>%
+    select(parid, yrblt, saleyr, adj_price, starts_with("pre_"), starts_with("post_"), starts_with("per_"),
+           starts_with("RP5_"), starts_with("RP8_")) %>%
+  #Turn Text into Dummies
+    mutate(pre_type = case_when(pre_corporate == 1 ~ "Corporate",
+                                 pre_private == 1 ~ "Private",
+                                 TRUE ~ "Other"),
+           post_type = case_when(post_corporate == 1 ~ "Corproate",
+                                  post_private == 1 ~ "Private",
+                                  TRUE ~ "Other"),
+           ln_adj_price = log(adj_price)) %>%
+    select(-c(pre_trustee, pre_nonprofit, pre_reown, pre_partnership, pre_hoa, pre_muni,pre_sale,pre_corporate, pre_private,
+              post_trustee, post_nonprofit, post_reown, post_partnership, post_hoa, post_muni, post_sale,
+              post_corporate, post_private)) %>%
+    relocate(adj_price, ln_adj_price, saleyr, .before = per_own) %>%
+    filter(pre_tenure != "BUILDER") %>%
+    arrange(parid, saleyr)
   
-  
-  # Pull out the sales data to know how many times a property sold over the sample
-  temp.sale <- core.cen %>%
-    group_by()
-    
-  
-  
-  
-    
-  temp <- core_RP5 %>%
-    select(ID, starts_with("nb"))
-  
-  core.5 <- core_cen %>%
-    left_join(., temp, by = "ID") %>%
-    select(-cen_yr, -year)  %>%
-    filter(!is.na(nb_nonres))  #removes 623 observations from main data
 
-  temp <- core_RP8 %>%
-    select(ID, starts_with("nb"))
+#Create Difference data
   
-  core.8 <- core_cen %>%
-    left_join(., temp, by = "ID") %>%
-    select(-cen_yr, -year)  %>%
-    filter(!is.na(nb_nonres))  #removes 653 observations from main data
+  #Add Year Sales Dummy
+  temp <- working %>%
+    mutate(d_year = as.character(saleyr))%>%
+    select(d_year) 
   
-  rm(core_cen, core_RP5, core_RP8, temp)
+  t <- model.matrix(~d_year - 1, temp)
+  
+  working <- working %>%
+    bind_cols(t)
+  rm(t, temp)  
+  
+  core <- working %>%
+    arrange(parid, saleyr) %>% 
+    relocate(pre_type, post_type, .before = adj_price) %>%
+    group_by(parid) %>%
+      mutate(across(adj_price:d_year2023, ~.x - lag(.x)),
+             tenure = paste(pre_tenure, post_tenure, sep = " - "),
+             type = paste(pre_type, post_type, sep = " - ")) %>%
+    ungroup() %>%
+    filter(!is.na(adj_price)) %>%
+    #Clean up data 
+    select(-c(yrblt, starts_with("pre_"), starts_with("post_"))) %>%
+    filter(saleyr != 0)
+  
+#Create dummies for tenures and types
+  temp <- core %>%
+    mutate(d_type = as.character(type))%>%
+    select(d_type) 
+  
+  t.1 <- model.matrix(~d_type - 1, temp)
+  
+  temp <- core %>%
+    mutate(d_tenure = as.character(tenure))%>%
+    select(d_tenure) 
+  
+  t.2 <- model.matrix(~d_tenure - 1, temp)
+   
+#Rejoin to the core data
+  core <- core %>%
+    bind_cols(., t.1, t.2) %>%
+    select(-c(tenure, type, parid)) 
+  
+  colnames(core) <- gsub(" - ", "2", colnames(core))
   
   
-#Repeat Sale Version
-    rs_temp <- core.5 %>%
-      filter(n > 1) 
-    
-    #Add Year Sales Dummy
-      temp <- rs_temp %>%
-        mutate(d_year = as.character(saleyr))%>%
-        select(d_year) 
-      
-      t <- model.matrix(~d_year - 1, temp)
-      
-      rs_temp <- rs_temp %>%
-        bind_cols(t)
-      rm(t, temp)  
-  
-  #Difference between sales of properties.
-      rs_core.5 <- rs_temp %>%
-        arrange(parid, saleyr) %>%
-        mutate(ln_price = log(adj_price)) %>%
-        group_by(parid) %>%
-        mutate(
-          d_saleyr = saleyr - lag(saleyr),
-          d_adj_price = adj_price - lag(adj_price),
-          d_ln_price = ln_price - lag(ln_price),
-          d_nb_corporate = nb_corporate - lag(nb_corporate),
-          d_nb_corporate2 = d_nb_corporate^2,
-          from = lag(pre_tenure),
-          to = post_tenure,
-          across(per_own:d_year2023, ~.x - lag(.x))) %>%
-        ungroup() %>%
-        filter(!is.na(d_adj_price),
-               !is.infinite(d_ln_price),
-               from != "BUILDER",
-               d_adj_price > -200000 & d_adj_price < 200000,
-               d_nb_corporate > -.40,
-               d_saleyr != 0) %>%
-        select(d_ln_price, d_adj_price, d_nb_corporate, starts_with("per_"), N2N, N2O, O2N, O2O,
-               P2P, P2C, C2P, C2C, ten1, trans.own, starts_with("d_"), starts_with("nb_")) 
 
-    
-#Regressions  
-    #Basic Indices
-      #Assign Data to Core and set Index
-      core <- rs_core.5
-      index <- c(names(select(core, starts_with("d_year"), -d_year2011)))
-      
-      #Set up the levels and regression parameters
-      set <- levels(factor(core$ten1))
-      color.set <- c("Nonowner to Nonowner" = "blue", "Owner to Nonowner" = "lightblue", 
-                     "Nonowner to Owner" = "red", "Owner to Owner" = "darkred")
-      
-      predictors <- c(index, "d_nb_corporate2", "per_blk", "per_asn", "per_oth", "per_u16", "per_o65")
-      
-      my_formula <- as.formula(paste("d_ln_price ~ -1 + ", paste(predictors, collapse = " + ")))
-      
-      #Run Regressions for each level
-      for(i in set){
-        
-        d.temp <- core %>%
-          filter(ten1 == i) %>%
-          select(d_ln_price, d_saleyr, eval(predictors)) 
-        
-        mod.1 <- rep.sale(my_formula, d.temp)
-        
-        ci.temp <- as.data.frame(confint(mod.1)) %>%
-          mutate(var = row.names(.)) %>%
-          remove_rownames() %>%
-          set_names(c("lci", "hci", "var"))
-        
-        c.temp <- as.data.frame(mod.1$coefficients) %>%
-          mutate(var = row.names(.)) %>%
-          remove_rownames() %>%
-          set_names(c("est", "var")) %>%
-          full_join(., ci.temp, by = "var") %>%
-          filter(var %in% index)%>%
-          mutate(mod = i,
-                 year = as.numeric(substr(var,7,10)))
-        
-        ifelse(i == set[[1]],
-               p.data <- c.temp,
-               p.data <- bind_rows(p.data, c.temp))
-        
-        rm(ci.temp, c.temp, d.temp)
-      }
-      
-      
-      
-      plot.1 <- ggplot(data = p.data) +
-        geom_line(aes(x = year, y = est, color = mod), linewidth = 1) +
-        geom_line(aes(x = year, y = lci, color = mod), linetype = "dashed") +
-        geom_line(aes(x = year, y = hci, color = mod), linetype = "dashed") +
-        geom_hline(yintercept = 0, color = "black", linewidth = 1.5) +
-        scale_x_continuous(
-          breaks = p.data$year, # Set breaks at each year in your data
-          labels = as.character(p.data$year) # Ensure labels are character
-        )+
-        scale_color_manual(values = color.set) +
-        labs(color = "Transaction Type",
-             x = "Year",
-             y = "Price Index") +
-        theme_bw() +
-        theme(axis.text.x=element_text(angle=60, hjust=1),
-              legend.position="bottom") 
-      
+  #Regression Models
   
+  variables <- colnames(core)
+  depVar <- 'ln_adj_price'
+
+  time.dum <- variables[grepl('d_year',variables)]
+    time.drop <- c("d_year2011")
+  time.dum <- paste(time.dum[!(time.dum %in% time.drop)], collapse = "+")
+  
+  types <- paste(variables[grepl('d_type', variables)], collapse = "+")
+  tenure <- paste(variables[grepl('d_tenure', variables)], collapse = "+")
+  
+  census <- variables[grepl('per_', variables)] 
+    cen.drop <- c("per_oth", "per_hs", "per_pov3")
+  census <- paste(census[!(census %in% cen.drop)], collapse = "+")
+  
+  RP5 <-variables[grepl('RP5', variables)]
+    RP5.drop <- c("RP5_distance", "RP5_ten.own", "RP5_other")
+  RP5 <- paste(RP5[!(RP5 %in% RP5.drop)], collapse = "+")
+  
+  RP52 <-variables[grepl('RP5', variables)]
+    RP5.drop2 <- c("RP5_distance", "RP5_ten.own", "RP5_other", "RP5_corporate", "RP5_private")
+  RP52 <- paste(RP52[!(RP52 %in% RP5.drop2)], collapse = "+")
+  
+  RP8 <-variables[grepl('RP8', variables)]
+    RP8.drop <- c("RP8_distance", "RP8_ten.own", "RP8_other")
+  RP8 <- paste(RP8[!(RP8 %in% RP8.drop)], collapse = "+")
+  
+  RP82 <-variables[grepl('RP8', variables)]
+    RP8.drop2 <- c("RP8_distance", "RP8_ten.own", "RP8_other", "RP8_corporate", "RP8_private")
+  RP82 <- paste(RP82[!(RP82 %in% RP8.drop2)], collapse = "+")
+  
+
+  
+  indepVars = paste(time.dum, RP5, census, sep = "+")
+  myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
+  mod.1 <-lm(myModel,data=core)
+  
+  indepVars = paste(time.dum, RP52, census, sep = "+")
+  myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
+  mod.2 <-lm(myModel,data=core)
+  
+  indepVars = paste(tenure, RP52, census, time.dum, sep = "+")
+  myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
+  mod.3 <-lm(myModel,data=core)
+  
+  indepVars = paste(tenure, RP52, RP82, census, time.dum, sep = "+")
+  myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
+  mod.4 <-lm(myModel,data=core)
   
   

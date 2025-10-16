@@ -3,6 +3,7 @@
 
 #Jeremy Groves
 #September 16, 2025
+#Updated: October 8, 2025: Fixed the neighbor errors and simplify program with new neighbor list. 
 
 rm(list = ls())
 
@@ -17,87 +18,91 @@ load(file="./Build/Input/neighbor.RData")
 
 #filter out of OWN only what is needed
     own <- OWN %>%
-      select(parid, co_zip, co_state, tenure, corporate, private, year) %>%
-      mutate(other = ifelse(corporate == 0 & private == 0, 1, 0))
-    #rm(OWN)
+      select(parid, co_zip, co_state, tenure, corporate, private, year, class, po_livunit) %>%
+      mutate(other = ifelse(corporate == 0 & private == 0, 1, 0),
+             po_livunit = replace_na(po_livunit, 0))
 
-#Create Centroid map of main parcels
+#Create Centroid map of all parcels
   loc.cen <- loc %>%
     st_centroid() %>%
     select(LOCATOR, PROPCLASS, LUC, LIVUNIT) %>%
-    mutate(ID = row_number())
-  
-    c<- as.data.frame(st_coordinates(loc.cen))
-  
-  loc.cen2 <- st_drop_geometry(bind_cols(loc.cen, c)) %>%
-    select(-c(LUC)) 
+    rename("parid" = "LOCATOR") %>%
+    mutate(X = st_coordinates(.)[,1],
+           Y = st_coordinates(.)[,2]) %>%
+    st_drop_geometry()
 
-  rm(loc.cen, c, loc)
-  
-  buffer_1320 <- df %>% #df is the nested dataframe created by the buffer command
-    #Join the centroid points to the base units using the LOCATOR.
-    left_join(., loc.cen2, by = c("name" = "LOCATOR")) %>%
+#Add base coordinates to sales data
+  temp <- core %>%
+    filter(n > 1) %>% #Limit to only those that sale more than once (for repeated sales)
+    select(parid, saleyr) %>%
+  #Join the centroid coordinates to the base parid
+    left_join(., loc.cen, by = "parid") %>%
+  #Rename and trim uneccessary data.
     rename("base.x" = "X",
-           "base.y" = "Y") %>%
-    select(c(-n, -PROPCLASS, -LIVUNIT)) %>%
-    unnest(., value)  %>%
-    #Next add the centroid points to the neighbors joining by the ID values
-    left_join(., loc.cen2, by=c("value" = "ID")) %>%
-    rename("Neighbor" = "LOCATOR") %>%
-    select(-value) %>%
-    #Calculate the distance between each point and its neighbors
+           "base.y" = "Y")  %>%
+    select(-c(PROPCLASS, LIVUNIT, LUC)) %>%
+    filter(!is.na(base.x)) 
+  
+#Add neighbor coordinate data to neighbor data and find distances and sort
+  core2 <- df %>%
+    unnest(cols = c(value)) %>%
+    rename("n.parid" = "value") %>%
+    left_join(.,loc.cen, by = c("n.parid" = "parid"), relationship = "many-to-many") %>%
+    filter(PROPCLASS == "R") %>%
+  #Join with the base data from above
+    right_join(temp, ., by = c("parid" = "base.parid"), relationship = "many-to-many") %>%
+  #Calculate the distance between each point and its neighbors
     mutate(distance = sqrt((X - base.x)^2 + (Y - base.y)^2)) %>%
-    #Remove own neighbors
+  #Remove own neighbors
     filter(distance > 0) %>%
-    select(name, Neighbor, PROPCLASS, LIVUNIT, distance) %>%
-    filter(LIVUNIT > 0 & PROPCLASS == "R")
+  #Sort by distance for each parcel
+    group_by(parid, saleyr) %>%
+    arrange(parid, saleyr, distance) %>%
+    mutate(closeness = seq(n())) %>%
+    ungroup() %>%
+    select(-c(base.x, base.y, X, Y, LUC, PROPCLASS, n))
+  
+#limit to the 5 nearest and the 13 nearest  
 
+W5RP <- core2 %>%
+  filter(closeness < 6) 
+
+W8RP <- core2 %>%
+  filter(closeness < 14 & closeness > 5)  
+
+  
 #Merge with ownership information for neighbors
-  wang <- core %>%
-    filter(n > 1) %>% #Keep only repeated sales
-    select(parid, po_livunit, yrblt, saleyr, new_con) %>%
-    rename("name" = "parid") %>%
-    left_join(., buffer_1320, by = "name", relationship = "many-to-many") %>%
-    left_join(., own, by = c("Neighbor" = "parid", "saleyr" = "year")) %>%
-    filter(!is.na(co_zip)) %>%
-  #Find the 5 and 8 nearest neighbors to replicate the 5RP and 8RP measures
-    arrange(name, saleyr, distance) %>%
-    group_by(name, saleyr) %>%
-    mutate(count = 1:n()) %>%
+  temp <- W5RP %>%
+    left_join(., own, by = c("n.parid" = "parid", "saleyr" = "year"), relationship = "many-to-many") %>%
+  #Turn Text into Dummies for averaging
+    mutate(ten.own = case_when(tenure == "OWNER" ~ 1,
+                               TRUE ~ 0),
+           ten.nown = 1 - ten.own) %>%
+    select(parid, saleyr, distance, ten.own, ten.nown, corporate, private, other, po_livunit) %>%
+    group_by(parid, saleyr) %>%
+    summarise(across(distance:po_livunit, ~ mean(.x, na.rm=TRUE))) %>%
     ungroup() %>%
-  #Remove object too far away
-    filter(count < 14) %>%
-    group_by(name, saleyr) %>%
-    mutate(n = max(count)) %>%
-    ungroup() %>%
-  #Remove cases where there are less than five nearest neighbors
-    filter(n > 4) %>%
-  #Keep only what is going to be in the neighbor measures
-    mutate(owner = ifelse(tenure == "OWNER", 1, 0),
-           nonowner = ifelse(owner == 1, 0, 1)) %>%
-    select(name, saleyr, new_con, LIVUNIT, owner, nonowner, corporate, private, other, count, n)
+    filter(!is.na(private)) %>%
+    rename_with(~str_c("RP5_", .), distance:po_livunit) 
   
-  
-#Create the 5RP and 8RP measures as in Wang
- wang5 <- wang %>%
-    filter(n > 4,
-           count < 6) %>%
-    select(-c(n, count))   %>%
-    group_by(name, saleyr) %>%
-    summarise(across(new_con : other, ~ mean(.x, na.rm=TRUE))) %>%
-    mutate(sales = n()) %>%
-    ungroup() %>%
-    rename_with(~str_c("RP5_", .), new_con:other)
+  core <- core %>%
+    left_join(., temp, by = c("parid", "saleyr"))
  
- wang8 <- wang %>%
-   filter(count > 5,
-          n == 13)  %>%  #This removes 944 cases related to 108 distinct observations
-   select(-c(n, count))   %>%
-   group_by(name, saleyr) %>%
-   summarise(across(new_con : other, ~ mean(.x, na.rm=TRUE))) %>%
-   mutate(sales = n()) %>%
-   ungroup() %>%
-   rename_with(~str_c("RP8_", .), new_con:other)
+  temp <- W8RP %>%
+    left_join(., own, by = c("n.parid" = "parid", "saleyr" = "year"), relationship = "many-to-many") %>%
+    #Turn Text into Dummies for averaging
+    mutate(ten.own = case_when(tenure == "OWNER" ~ 1,
+                               TRUE ~ 0),
+           ten.nown = 1 - ten.own) %>%
+    select(parid, saleyr, distance, ten.own, ten.nown, corporate, private, other, po_livunit) %>%
+    group_by(parid, saleyr) %>%
+    summarise(across(distance:po_livunit, ~ mean(.x, na.rm=TRUE))) %>%
+    ungroup() %>%
+    filter(!is.na(private)) %>%
+    rename_with(~str_c("RP8_", .), distance:po_livunit) 
+ 
+  core <- core %>%
+    left_join(., temp, by = c("parid", "saleyr")) %>%
+    filter(n > 1)
 
-
-save(wang5, wang8, file = "./Build/Output/wang.RData")
+save(core, file = "./Build/Output/wang.RData")

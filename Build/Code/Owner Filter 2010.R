@@ -120,10 +120,6 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                  po_city = clean_strings(TAX_CITY),
                  po_zip = clean_strings(TAX_ZIP),
                  po_livunit = as.numeric(LIVUNIT)) %>%
-          filter(#co_stradr != "",
-                 #CLASS == "R",
-                 !is.na(po_livunit),
-                 po_livunit > 0) %>%
           mutate(tenure = case_when(po_stradr == co_stradr ~ "OWNER",
                                     TRUE ~ "NONOWNER")) %>%
           select(PARID, starts_with("co_"), starts_with("po_"), CLASS, tenure, XCOORD, YCOORD)
