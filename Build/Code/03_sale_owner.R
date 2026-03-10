@@ -42,12 +42,12 @@ load(file="./Build/Output/dwell.RData")
 
   work <- sold %>%
     left_join(., OWN, by=c("parid", "pre_sale"="year")) %>%
-    select(-c(key, fxc_stradr)) %>% #Remove unneeded columns
-    rename_with(~str_c("pre_", .), corporate:muni) %>%
+    select(-c(key)) %>% #Remove unneeded columns
+    rename_with(~str_c("pre_", .), corporate:other) %>%
     rename(pre_tenure = tenure) %>%
     mutate(pre_tenure = case_when(is.na(pre_tenure) & seller == "BUILDER" ~ "BUILDER",
                                   TRUE ~ pre_tenure),
-           across(.cols = pre_corporate:pre_muni,
+           across(.cols = pre_corporate:pre_other,
                          ~ifelse(pre_tenure == "BUILDER",0, .)),
                                  pre_trustee = case_when(pre_tenure == "BUILDER" ~ 1,
                                  TRUE ~ pre_trustee ),
@@ -140,7 +140,6 @@ load(file="./Build/Output/dwell.RData")
   work1 <- work %>%
     left_join(., select(OWN, -starts_with("po_")), by=c("parid", "post_sale"="year"))  %>%
     filter(post_sale != 2025) %>%
-    select(-fxc_stradr) %>%
     select(-co_stradr) %>%
     mutate(co_city = na_if(co_city, ""),
            co_state = na_if(co_state, ""),
@@ -158,7 +157,6 @@ load(file="./Build/Output/dwell.RData")
         
         temp2 <- OWN %>% 
           filter(parid %in% temp1$parid)  %>%
-          select(-fxc_stradr) %>%
           bind_rows(., temp1) %>%
           arrange(parid, year) %>%
           group_by(parid) %>%
@@ -200,7 +198,7 @@ load(file="./Build/Output/dwell.RData")
           select(-starts_with("fix_")) %>%
           filter(!is.na(corporate)) %>%  #this removes 27 items where the post tenure type is missing
           select(-xcoord, -ycoord, -key) %>%
-          rename_with(~str_c("post_", .), tenure:muni) %>%
+          rename_with(~str_c("post_", .), tenure:other) %>%
           select(ID, parid, starts_with("po_"), yrblt, saleyr, adj_price, starts_with("pre_"), starts_with("post_")) %>%
           filter(!is.na(post_co_zip))   #Drops 4 observations
         
@@ -226,19 +224,19 @@ load(file="./Build/Output/dwell.RData")
                                  TRUE ~ 0),
         #This creates a set of indicators for is the owner is in the same city, state, or zip after the purchase
         #The NA values denote cases of original sales from builder
-             city = as.numeric(pre_co_city != post_co_city),
-             state = as.numeric(pre_co_state != post_co_state),
-             zip = as.numeric(pre_co_zip != post_co_zip),
+             ll_city = as.numeric(pre_co_city == post_co_city),
+             ll_state = as.numeric(pre_co_state == post_co_state),
+             ll_zip = as.numeric(pre_co_zip == post_co_zip),
         #This creates a set of indicators to identify moves from private to non-private and combinations thereof
-             P2C = ifelse(pre_private == 1 & post_private == 0, 1, 0),
+             P2NP = ifelse(pre_private == 1 & post_private == 0, 1, 0),
              P2P = ifelse(pre_private == 1 & post_private == 1, 1, 0),
-             C2C = ifelse(pre_private == 0 & post_private == 0, 1, 0),
-             C2P = ifelse(pre_private == 0 & post_private == 1, 1, 0),
+             NP2NP = ifelse(pre_private == 0 & post_private == 0, 1, 0),
+             NP2P = ifelse(pre_private == 0 & post_private == 1, 1, 0),
         #This creates a text label for the different owner type transactions
-            trans.own = case_when(P2C == 1 ~ "Private to Not Private",
+            trans.own = case_when(P2NP == 1 ~ "Private to Not Private",
                                   P2P == 1 ~ "Private to Private",
-                                  C2C == 1 ~ "Not Private to Not Private",
-                                  C2P == 1 ~ "Not Private to Private",
+                                  NP2NP == 1 ~ "Not Private to Not Private",
+                                  NP2P == 1 ~ "Not Private to Private",
                                   TRUE ~ "Unknown"),
         #This creates a set of indicators to identify moves from owner to non-owner and combinations thereof.
         #Builders are considered non-owners
@@ -253,17 +251,37 @@ load(file="./Build/Output/dwell.RData")
                               O2N == 1 ~ "Owner to Not Owner",
                               TRUE ~ "Unknown"),
         #This creates a text label for where the property ends in either private or non-private
-             trans.end.own = case_when(P2C == 1 ~ "Not Private",
+               trans.end.own = case_when(P2NP == 1 ~ "Not Private",
                                        P2P == 1 ~ "Private",
-                                       C2C == 1 ~ "Not Private",
-                                       C2P == 1 ~ "Private",
+                                       NP2NP == 1 ~ "Not Private",
+                                       NP2P == 1 ~ "Private",
                                        TRUE ~ "Unknown"),
         #This creates a text label for where the property ends in either owner or not owner
              trans.end.ten = case_when(N2O == 1 ~ "Owner",
                                        N2N == 1 ~ "Not Owner",
                                        O2O == 1 ~ "Owner",
                                        O2N == 1 ~ "Not Owner",
-                                       TRUE ~ "Unknown")) %>%
+                                       TRUE ~ "Unknown"),
+        #Type 2 denotes the transfer to and from across the four categories of owner type.    
+            type2 = case_when(pre_private == 1 & post_private == 1 ~ "P2P",
+                              pre_private == 1 & post_corporate == 1 ~ "P2C",
+                              pre_private == 1 & post_legal == 1 ~ "P2L",
+                              pre_private == 1 & post_other == 1 ~ "P2O",
+                              
+                              pre_corporate == 1 & post_private == 1 ~ "C2P",
+                              pre_corporate == 1 & post_corporate == 1 ~ "C2C",
+                              pre_corporate == 1 & post_legal == 1 ~ "C2L",
+                              pre_corporate == 1 & post_other == 1 ~ "C2O",
+                              
+                              pre_legal == 1 & post_private == 1 ~ "L2P",
+                              pre_legal == 1 & post_corporate == 1 ~ "L2C",
+                              pre_legal == 1 & post_legal == 1 ~ "L2L",
+                              pre_legal == 1 & post_other == 1 ~ "L2O",
+                              
+                              pre_other == 1 & post_private == 1 ~ "L2P",
+                              pre_other == 1 & post_corporate == 1 ~ "L2C",
+                              pre_other == 1 & post_legal == 1 ~ "L2L",
+                              pre_other == 1 & post_other == 1 ~ "L2O")) %>%
       filter(adj_price < 2500000) %>%
       add_count(parid)  #Add a count of the number of times a parcel sells in the data
     

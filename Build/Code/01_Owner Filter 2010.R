@@ -15,6 +15,7 @@
 #June 11, 2025: Added the clean strings command
 #June 19, 2025: Discovered Error in the read.csv code that was cutting short the ownership files. Also found that some
 #               parids have been changed over time.
+#March 10, 2026: Added the categories of legal and other to reduce categories to only four.
 
 rm(list=ls())
 
@@ -128,7 +129,7 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
       
  ##Ownership Classification Section#####     
   own_dat <- work %>%
-    filter(tenure == "NONOWNER")%>%
+    filter(tenure == "NONOWNER")  %>%
     mutate(co_name = gsub("corpation", "corporation", co_name)) %>%  #This part of mutate correct common misspellings
     mutate(corporate = case_when(str_detect(co_name, "\\s+corporation+.*") ~ 1,
                                  str_detect(co_name, "\\s+incorporated+.*") ~ 1,
@@ -378,8 +379,16 @@ OWN1 <- OWN1 %>%
   
 OWN <- OWN1 %>%
   mutate(po_zip = as.numeric(po_zip),
-         co_zip = as.numeric(co_zip)) %>%
-  select(-c(zip, fx_stradr, fx_city, fx_zip, fxc_city, fxc_state, fxc_zip)) %>%
+         co_zip = as.numeric(co_zip),
+         legal = case_when(trustee == 1 ~ 1,
+                           partnership == 1 ~ 1,
+                           TRUE ~ 0),
+         other = case_when(nonprofit == 1 ~ 1,
+                           reown == 1 ~ 1,
+                           hoa == 1 ~ 1,
+                           muni == 1 ~ 1,
+                           TRUE ~ 0)) %>%
+  select(-c(zip, fx_stradr, fx_city, fx_zip, fxc_city, fxc_state, fxc_zip, fxc_stradr)) %>%
   filter(!is.na(xcoord)) %>% #drops 4 observations
   filter(po_stradr != "") %>%  #drops 11 observation 
   filter(!is.na(po_zip)) %>% #drops 9 observation 

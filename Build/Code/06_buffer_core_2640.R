@@ -15,19 +15,11 @@ library(sf)
 #Load Data
   load(file="./Build/Output/sal_own.RData")
   loc<-st_read("F:/Data/Saint Louis GIS Data/gis_2025/Parcels_Current.shp")
-  load(file="./Build/Output/Own10.RData")
-  
-  #filter out of OWN only what is needed
-  own <- OWN %>%
-    select(parid, po_livunit, po_zip, co_zip, co_state, tenure, corporate:year)
-  rm(OWN)
-  
+
   #Create Centroid map of main parcels
   loc.cen <- loc %>%
     st_centroid() %>%
-    select(LOCATOR, PROPCLASS, LUC, LIVUNIT) %>%
-    mutate(ID = row_number())
-    
+    select(LOCATOR, PROPCLASS, LUC, LIVUNIT) 
 
 #Filter our the parcels that are in the sales data and pull those from the map data
   working <- core %>%
@@ -42,33 +34,36 @@ library(sf)
     st_as_sf(., sf_column_name = "geometry") %>%
     st_make_valid() %>%
     st_centroid() %>%
-    st_buffer(., 2640) %>%
-    st_intersects(., loc.cen)
-  #Change the names in the list with the parcel ids
-    names(buffer) <- working$parid
-  #Turn the list to a nested tibble
-    df <- enframe(buffer) %>%
-      mutate(n = lengths(value))
-  #Now unnest the tibble and create a data frame with the base observation from the core data and all of its neighbors
-    buffer_2640 <- df %>%
-      unnest(., value)  %>%
-      left_join(., loc.cen, by=c("value" = "ID")) %>%
-      st_drop_geometry() %>%
-      select(-value, -geometry, -LUC) %>%
-      rename("base.parid" = "name",
-             "neigh.parid" = "LOCATOR") %>%
-      filter(!is.na(PROPCLASS)) #This drops about 30K cases which related to only about 381 parcel ids that are mostly
-                                #in error, have the prefix PL or OL which do not show up in records, or 2025 properties.
-  #Housekeeping
-    rm(df, buffer, working, loc, loc.cen)
+    st_buffer(., 2640) 
+  
+  buffer2 <- loc.cen %>%
+    st_join(., buffer) %>%
+    filter(!is.na(ID)) %>%
+    st_drop_geometry() %>%
+    rename("base.parid" = "parid",
+           "neigh.parid" = "LOCATOR") %>%
+    filter(!is.na(PROPCLASS)) 
+
+   #Housekeeping
+    rm(buffer, working, loc, loc.cen)
     gc()
+    
+    load(file="./Build/Output/Own10.RData")
+    
+    #filter out of OWN only what is needed
+    own <- OWN %>%
+      select(parid, po_livunit, po_zip, co_zip, co_state, tenure, corporate:year)
+    rm(OWN)
     
 #Combine the buffer list with the year of sale so we can get the right ownership information for the neighbors
     working <- core %>%
-      select(parid, saleyr) %>%
-      left_join(., buffer_2640, by=c("parid" = "base.parid"), relationship = "many-to-many") %>%
-      filter(!is.na(PROPCLASS)) %>% #Removes 20 cases; likely same as above in core with no match on map.
-      left_join(., own, by=c("neigh.parid" = "parid", "saleyr" = "year"))  %>%
+      select(parid, saleyr)%>%
+      left_join(., buffer2, by=c("parid" = "base.parid"), relationship = "many-to-many") %>%
+      filter(!is.na(PROPCLASS))  #Removes 20 cases; likely same as above in core with no match on map.
+   rm(buffer2) 
+   gc()  
+   working <- working %>% 
+      left_join(., own, by=c("neigh.parid" = "parid", "saleyr" = "year")) %>%
       mutate(
         po_livunit = replace_na(po_livunit, 0),
         nonres = ifelse(is.na(corporate), 1, 0), #This creates a value for the nonresidential properties in neighbors
@@ -86,19 +81,16 @@ library(sf)
         prop_multi = case_when(PROPCLASS == "W" ~ 1,
                                PROPCLASS == "X" ~ 1,
                                PROPCLASS == "Z" ~ 1,
-                               TRUE ~ 0)) %>%
-      select(-c(tenure, co_state, co_zip, po_zip, po_livunit, key, PROPCLASS, neigh.parid)) %>% 
-      group_by(parid, saleyr) %>%
-      summarise(across(n:prop_multi, mean)) %>%
-      ungroup() %>%
-      rename("neighbors" = "n",
-             "nb_livunit" = "LIVUNIT") %>%
-      rename_with(~str_c("nb_", .), corporate:prop_multi)
- 
+                               TRUE ~ 0),
+        neighbor = 1) %>%
+      select(-c(tenure, co_state, co_zip, po_zip, po_livunit, key, PROPCLASS, neigh.parid, LUC, ID)) %>%
+      summarise(across(LIVUNIT:neighbor, sum), .by = c(parid, saleyr)) %>%
+      rename_with(~str_c("nb_", .), LIVUNIT:prop_multi)
+ rm(own)
 #Join to the core data and save as a new version of core
   core2 <- core %>%
     left_join(., working, by=c("parid", "saleyr")) %>%
-    filter(!is.na(neighbors))
+    filter(!is.na(neighbor))
 
   save(core2, file="./Build/Output/core_2640.RData")
 

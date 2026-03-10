@@ -20,7 +20,7 @@ library(sf)
   
   #filter out of OWN only what is needed
   own <- OWN %>%
-    select(parid, po_livunit, po_zip, co_zip, co_state, tenure, class, corporate:year)
+    select(parid, po_livunit, po_zip, co_zip, co_state, tenure, class, corporate:other)
   rm(OWN)
   
   #Create Centroid map of main parcels
@@ -82,7 +82,7 @@ library(sf)
       left_join(., own, by = c("n.parid" = "parid", "saleyr" = "year"), relationship = "many-to-many") %>%
       mutate(
         po_livunit = replace_na(po_livunit, 0),
-        across(.cols = corporate:key,
+        across(.cols = corporate:other,
                ~ifelse(is.na(.), 0, .)),
         nonzip = ifelse(po_zip != co_zip, 1, 0),
         nonzip = ifelse(is.na(nonzip), 0, nonzip),
@@ -101,9 +101,7 @@ library(sf)
                                class == "Z" ~ 1,
                                TRUE ~ 0)) %>%
       select(-c(tenure, co_state, co_zip, po_zip, key, class, n.parid)) %>% 
-      group_by(parid, saleyr) %>%
-      summarise(across(po_livunit:prop_multi, mean)) %>%
-      ungroup() %>%
+      summarise(across(po_livunit:prop_multi, mean), .by = c(parid, saleyr)) %>%
       rename_with(~str_c("nb_", .), po_livunit:prop_multi)
  
 #Join to the core data and save as a new version of core
