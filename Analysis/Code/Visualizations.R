@@ -104,10 +104,10 @@ load("./Analysis/Input/Core14.RData")
                statistic = list(all_continuous() ~ "{mean} ({sd})")) %>%
    add_overall()
  
- #1/2 Mile Buffers
-     load("./Analysis/Input/Core12.RData")  
+ #1/8 Mile Buffers
+     load("./Analysis/Input/Core18.RData")  
     
-     temp <- rs_core1.2 %>%
+     temp <- rs_core1.8 %>%
        tbl_summary(by = ten1,
                    include = c(nb_private, nb_corporate, nb_legal, nb_other,
                                nb_owner, nb_nonzip, nb_prop_agg, nb_prop_com,
@@ -125,7 +125,7 @@ load("./Analysis/Input/Core14.RData")
                                 nb_prop_agg ~ "Aggricultural")) %>%
        add_overall()
      
-     temp <- rs_core1.4 %>%
+     temp <- rs_core1.8 %>%
        tbl_summary(by = ten1,
                    include = c(starts_with("per_"), income, own_sz, age),
                    statistic = list(all_continuous() ~ "{mean} ({sd})")) %>%

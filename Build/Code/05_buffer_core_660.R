@@ -1,7 +1,7 @@
 #This script creates one-quarter mile buffers around each of the properties in the sold data frame 
 #using the 2025 parcel map from STL based on centroids created by the *sf* package. It then merges with the map
 #shapefile to determine non-residential uses and then with OWN data frame for ownership of residential parcels.
-#The data is aggregated and then saved as core1032 to denote the one-quarter mile. This file is a modified version of
+#The data is aggregated and then saved as core660 to denote the one-eighth mile. This file is a modified version of
 #the original buffer_create that uses a much faster way to aggregate the neighbors from the intersects() command.
 
 #Jeremy R. Groves
@@ -35,8 +35,8 @@ library(sf)
     st_as_sf(., sf_column_name = "geometry") %>%
     st_make_valid() %>%
     st_centroid() %>%
-    st_buffer(., 1320) 
-  
+    st_buffer(., 660) 
+
   buffer2 <- loc.cen %>%
     st_join(., buffer) %>%
     filter(!is.na(ID)) %>%
@@ -48,23 +48,23 @@ library(sf)
 #Housekeeping
   rm(buffer, working, loc, loc.cen)
   gc()
-
-load(file="./Build/Output/Own10.RData")
-
-#filter out of OWN only what is needed
+  
+  load(file="./Build/Output/Own10.RData")
+  
+  #filter out of OWN only what is needed
   own <- OWN %>%
     select(parid, po_livunit, po_zip, co_zip, co_state, tenure, corporate:other)
   rm(OWN)
-
+    
   working <- core %>%
     select(parid, saleyr)%>%
     left_join(., buffer2, by=c("parid" = "base.parid"), relationship = "many-to-many") %>%
     filter(!is.na(PROPCLASS))  #Removes 20 cases; likely same as above in core with no match on map.
-#rm(buffer2) 
-
-gc()  
-
-#Join and create count of neighbors 
+  #rm(buffer2) 
+  
+  gc()  
+ 
+  #Join and create count of neighbors 
   working <- working %>% 
     left_join(., own, by=c("neigh.parid" = "parid", "saleyr" = "year")) %>%
     filter(!is.na(trustee)) 
@@ -74,7 +74,7 @@ gc()
     mutate(neighbors = 1) %>%
     summarise(neighbors = sum(neighbors), .by = c(parid, saleyr)) %>%
     distinct()
-  
+   
   working <- working %>%   
     mutate(
       po_livunit = replace_na(po_livunit, 0),
@@ -98,8 +98,8 @@ gc()
     summarise(across(LIVUNIT:prop_multi, mean), .by = c(parid, saleyr)) %>%
     rename_with(~str_c("nb_", .), LIVUNIT:prop_multi)
   rm(own)
-
-#Join to the core data and save as a new version of core
+  
+ #Join to the core data and save as a new version of core
   core2 <- core %>%
     left_join(., working, by=c("parid", "saleyr")) %>%
     left_join(., neighbors, by = c("parid", "saleyr")) %>%
@@ -109,4 +109,6 @@ gc()
            !is.na(po_livunit)) %>%
     distinct()
   
-  save(core2, file="./Build/Output/core_1320.RData")
+  save(core2, file="./Build/Output/core_660.RData")
+  
+    
