@@ -8,6 +8,9 @@ library(gt)
 library(estimatr)
 library(flextable)
 
+reg<- set_flextable_defaults(font.family = "Times")
+   
+
 #Load Data
 
   load("./Analysis/Input/Core18.RData")
@@ -38,7 +41,11 @@ library(flextable)
   tab1a <- tbl_regression(mod.1,
                          intercept = TRUE,
                          estimate_fun = label_style_number(digits = 4))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Variable", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   indepVars = paste(census,indepVars, sep = "+")
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
@@ -47,14 +54,31 @@ library(flextable)
   tab1b <- tbl_regression(mod.2,
                           intercept = TRUE ,
                           estimate_fun = label_style_number(digits = 4))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()  %>%
+    modify_header(label = "Variable", estimate = "Estimate",
+                  std.error = "Std. Error")
   
-  tab1 <- tbl_merge(list(tab1a, tab1b), tab_spanner = c("**Column One**", "**Column Two**"), quiet = TRUE) %>%
+  tab1 <- tbl_merge(list(tab1a, tab1b), tab_spanner = c("Column One", "Column Two"), quiet = TRUE) %>%
+    modify_table_body(
+      ~.x %>% 
+        dplyr::arrange(
+          row_type == "glance_statistic")
+    ) %>%
     as_flex_table() %>%
     add_footer_lines("Standard Errors Clustered as Census Tract") %>%
     add_header_lines("Table One: Full Sample") %>%
-    align(., align = "center", part = "header") %>%
-    bold(part = "header")
+    bold(part = "header", i = 1) %>%
+    align(align = "center", part = "header") %>%
+    fontsize(part = "header", size = 14) %>%
+    fontsize(part = "body", size = 11) %>%
+    fontsize(part = "footer", size = 9) %>%
+    line_spacing(part = "header", space = 1.2) %>%
+    line_spacing(part = "body", space = 0.75) %>%
+    line_spacing(part = "footer", space = 0.5) 
+
+   
 
 #Main Model 
     
@@ -70,10 +94,11 @@ library(flextable)
                               nb_other = "Share Other Owned",
                               nb_owner = "Share Owner Occupied"),
                  estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   mod.3a <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Owner"))
   mod.3b <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Not Owner"))
@@ -87,10 +112,11 @@ library(flextable)
                               nb_other = "Share Other Owned",
                               nb_owner = "Share Owner Occupied"),
                  estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   
   tab2c<- tbl_regression(mod.3b,
@@ -102,18 +128,29 @@ library(flextable)
                                    nb_other = "Share Other Owned",
                                    nb_owner = "Share Owner Occupied"),
                       estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
-  
-  tab2 <- tbl_merge(list(tab2a, tab2b,tab2c), tab_spanner = c("**Full Sample**", "**Owners**", "**Not Owners**")) %>%
+  tab2 <- tbl_merge(list(tab2a, tab2b,tab2c), tab_spanner = c("Full Sample","Owners", "Not Owners")) %>%
+    modify_table_body(
+      ~.x %>% 
+        dplyr::arrange(
+          row_type == "glance_statistic")
+    ) %>%
     as_flex_table() %>%
     add_footer_lines("Standard Errors Clustered as Census Tract") %>%
-    add_header_lines("Table Two: One-Eighth Mile Neighborhood") %>%
-    align(., align = "center", part = "header") %>%
-    bold(part = "header")
+    add_header_lines("Table One: Full Sample") %>%
+    bold(part = "header", i = 1) %>%
+    align(align = "center", part = "header") %>%
+    fontsize(part = "header", size = 14) %>%
+    fontsize(part = "body", size = 11) %>%
+    fontsize(part = "footer", size = 9) %>%
+    line_spacing(part = "header", space = 1.2) %>%
+    line_spacing(part = "body", space = 0.75) %>%
+    line_spacing(part = "footer", space = 0.5) 
   
   mod.3c <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.own == "Private"))
   mod.3d <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.own == "Not Private"))
@@ -127,10 +164,11 @@ library(flextable)
                                       nb_other = "Share Other Owned",
                                       nb_owner = "Share Owner Occupied"),
                          estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   tab2d<- tbl_regression(mod.3d,
                          include = c(starts_with("nb_")),
@@ -141,17 +179,29 @@ library(flextable)
                                       nb_other = "Share Other Owned",
                                       nb_owner = "Share Owner Occupied"),
                          estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   tab3 <- tbl_merge(list(tab2a, tab2c,tab2d), tab_spanner = c("**Full Sample**", "**Private**", "**Not Private**")) %>%
+    modify_table_body(
+      ~.x %>% 
+        dplyr::arrange(
+          row_type == "glance_statistic")
+    ) %>%
     as_flex_table() %>%
     add_footer_lines("Standard Errors Clustered as Census Tract") %>%
-    add_header_lines("Table Three: One-Eighth Mile Neighborhood") %>%
-    align(., align = "center", part = "header") %>%
-    bold(part = "header")
+    add_header_lines("Table One: Full Sample") %>%
+    bold(part = "header", i = 1) %>%
+    align(align = "center", part = "header") %>%
+    fontsize(part = "header", size = 14) %>%
+    fontsize(part = "body", size = 11) %>%
+    fontsize(part = "footer", size = 9) %>%
+    line_spacing(part = "header", space = 1.2) %>%
+    line_spacing(part = "body", space = 0.75) %>%
+    line_spacing(part = "footer", space = 0.5) 
   
   indepVars = paste("nb_nonzip","nb_owner",indepVars, sep = "+")
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
@@ -167,10 +217,11 @@ library(flextable)
                                       nb_owner = "Share Owner Occupied",
                                       nb_nonzip = "Share Owner not in Zip Area"),
                          estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   mod.4a <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Owner"))
   mod.4b <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Not Owner"))
@@ -185,10 +236,11 @@ library(flextable)
                                       nb_owner = "Share Owner Occupied",
                                       nb_nonzip = "Share Owner not in Zip Area"),
                          estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   tab4c<- tbl_regression(mod.4b,
                          include = c(starts_with("nb_")),
@@ -200,18 +252,30 @@ library(flextable)
                                       nb_owner = "Share Owner Occupied",
                                       nb_nonzip = "Share Owner not in Zip Area"),
                          estimate_fun = label_style_number(digits = 4))%>%
-    modify_header(label ~ "Changes in:") %>%
-    add_glance_table(include = c(nobs),
-                     label = list(nobs = "Observations"))%>%
-    add_significance_stars()
+    add_significance_stars()%>%
+    add_glance_table(include = c(r.squared, nobs))  %>%
+    remove_abbreviation()%>%
+    modify_header(label = "Changes in:", estimate = "Estimate",
+                  std.error = "Std. Error")
   
   
   tab4 <- tbl_merge(list(tab4a, tab4b,tab4c), tab_spanner = c("**Full Sample**", "**Owners**", "**Not Owners**")) %>%
+    modify_table_body(
+      ~.x %>% 
+        dplyr::arrange(
+          row_type == "glance_statistic")
+    ) %>%
     as_flex_table() %>%
     add_footer_lines("Standard Errors Clustered as Census Tract") %>%
-    add_header_lines("Table Four: One-Eighth Mile Neighborhood") %>%
-    align(., align = "center", part = "header") %>%
-    bold(part = "header")
+    add_header_lines("Table One: Full Sample") %>%
+    bold(part = "header", i = 1) %>%
+    align(align = "center", part = "header") %>%
+    fontsize(part = "header", size = 14) %>%
+    fontsize(part = "body", size = 11) %>%
+    fontsize(part = "footer", size = 9) %>%
+    line_spacing(part = "header", space = 1.2) %>%
+    line_spacing(part = "body", space = 0.75) %>%
+    line_spacing(part = "footer", space = 0.5) 
   
   save_as_docx(tab1, tab2, tab3, tab4, path = "./Analysis/Output/Eighth Tables.docx")
   

@@ -4,6 +4,7 @@ rm(list=ls())
 
 library(tidyverse)
 library(gtsummary)
+library(flextable)
 
 
 load(file="./Build/Output/Own10.RData") 
@@ -39,7 +40,9 @@ load("./Analysis/Input/Core14.RData")
     tbl_summary(by = CLASS,
                 statistic = list(all_continuous() ~ "{mean} ({sd})",
                                  all_categorical() ~ "{p}%")) %>%
-  add_overall()
+    remove_footnote_body() %>%
+    add_overall() %>%
+    modify_header(all_stat_cols() ~ "{level}")
   
   temp <- own %>%
     select(year, private, corporate, legal, other) %>%
