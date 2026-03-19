@@ -40,9 +40,9 @@ load("./Analysis/Input/Core14.RData")
     tbl_summary(by = CLASS,
                 statistic = list(all_continuous() ~ "{mean} ({sd})",
                                  all_categorical() ~ "{p}%")) %>%
-    remove_footnote_body() %>%
     add_overall() %>%
-    modify_header(all_stat_cols() ~ "{level}")
+    modify_header(all_stat_cols() ~ "{level}") %>%
+    modify_footnote(everything() ~ NA)
   
   temp <- own %>%
     select(year, private, corporate, legal, other) %>%

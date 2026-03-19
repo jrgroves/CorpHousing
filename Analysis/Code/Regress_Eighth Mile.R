@@ -17,7 +17,15 @@ reg<- set_flextable_defaults(font.family = "Times")
   rs_core1.8 <- rs_core1.8 %>%
     mutate(income = income / 1000,
            post19 = case_when(saleyr > 2018 ~ 1,
-                              TRUE ~ 0))
+                              TRUE ~ 0),
+           trans.ten = case_when(trans.ten=="Not Owner to Not Owner" ~ "N2N",
+                                 trans.ten=="Not Owner to Owner" ~  "N2O",
+                                 trans.ten=="Owner to Not Owner" ~ "O2N",
+                                 trans.ten=="Owner to Owner" ~ "O2O",
+                                 TRUE ~ NA) ,
+           trans.ten = factor(trans.ten, levels = c("O2O", "N2N", "N2O", "O2N"),
+                              labels = c("Owner to Owner","Nonowner to Nonowner",
+                                         "Nonowner to Owner","Owner to Nonowner")))
   
 #Define Variables 
   
@@ -33,12 +41,12 @@ reg<- set_flextable_defaults(font.family = "Times")
   census <- paste(census[!(census %in% cen.drop)], collapse = "+")
     census <- (paste("income", census, sep = "+"))
   
-  
+#Base Model  
   indepVars = time.dum
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
-  mod.1 <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
+  mod.1a <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
   
-  tab1a <- tbl_regression(mod.1,
+  tab1a <- tbl_regression(mod.1a,
                          intercept = TRUE,
                          estimate_fun = label_style_number(digits = 4))%>%
     add_significance_stars()%>%
@@ -49,9 +57,9 @@ reg<- set_flextable_defaults(font.family = "Times")
   
   indepVars = paste(census,indepVars, sep = "+")
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
-  mod.2 <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
+  mod.1b <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
   
-  tab1b <- tbl_regression(mod.2,
+  tab1b <- tbl_regression(mod.1b,
                           intercept = TRUE ,
                           estimate_fun = label_style_number(digits = 4))%>%
     add_significance_stars()%>%
@@ -78,14 +86,15 @@ reg<- set_flextable_defaults(font.family = "Times")
     line_spacing(part = "body", space = 0.75) %>%
     line_spacing(part = "footer", space = 0.5) 
 
-   
 
 #Main Model 
     
-  indepVars = paste("nb_corporate", "nb_private", "nb_legal", "nb_other", indepVars, sep = "+")
+  indepVars = paste("nb_corporate", "nb_private", "nb_legal", "nb_other", time.dum,
+                    census, sep = "+")
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
-  mod.3 <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8) 
-  tab2a <- tbl_regression(mod.3,
+  mod.2a <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8) 
+  
+  tab2a <- tbl_regression(mod.2a,
                  include = c(starts_with("nb_")),
                  intercept = TRUE,
                  label = list(nb_corporate = "Share Corporate Owned",
@@ -100,13 +109,17 @@ reg<- set_flextable_defaults(font.family = "Times")
     modify_header(label = "Changes in:", estimate = "Estimate",
                   std.error = "Std. Error")
   
-  mod.3a <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Owner"))
-  mod.3b <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Not Owner"))
+  indepVars = paste("nb_corporate", "nb_private", "nb_legal", "nb_other", "trans.ten",
+                    time.dum, census, sep = "+")
+  myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
+  mod.2b <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
   
-  tab2b<- tbl_regression(mod.3a,
-                 include = c(starts_with("nb_")),
+  
+  tab2b<- tbl_regression(mod.2b,
+                 include = c(starts_with("nb_"), starts_with("trans.")),
                  intercept = TRUE,
-                 label = list(nb_corporate = "Share Corporate Owned",
+                 label = list(trans.ten = "Tenure Change",
+                              nb_corporate = "Share Corporate Owned",
                               nb_private = "Share Private Owned",
                               nb_legal = "Share Legal Owned",
                               nb_other = "Share Other Owned",
@@ -117,48 +130,14 @@ reg<- set_flextable_defaults(font.family = "Times")
     remove_abbreviation()%>%
     modify_header(label = "Changes in:", estimate = "Estimate",
                   std.error = "Std. Error")
+
+  mod.2c <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.own == "Private"))
   
-  
-  tab2c<- tbl_regression(mod.3b,
-                      include = c(starts_with("nb_")),
-                      intercept = TRUE,
-                      label = list(nb_corporate = "Share Corporate Owned",
-                                   nb_private = "Share Private Owned",
-                                   nb_legal = "Share Legal Owned",
-                                   nb_other = "Share Other Owned",
-                                   nb_owner = "Share Owner Occupied"),
-                      estimate_fun = label_style_number(digits = 4))%>%
-    add_significance_stars()%>%
-    add_glance_table(include = c(r.squared, nobs))  %>%
-    remove_abbreviation()%>%
-    modify_header(label = "Changes in:", estimate = "Estimate",
-                  std.error = "Std. Error")
-  
-  tab2 <- tbl_merge(list(tab2a, tab2b,tab2c), tab_spanner = c("Full Sample","Owners", "Not Owners")) %>%
-    modify_table_body(
-      ~.x %>% 
-        dplyr::arrange(
-          row_type == "glance_statistic")
-    ) %>%
-    as_flex_table() %>%
-    add_footer_lines("Standard Errors Clustered as Census Tract") %>%
-    add_header_lines("Table One: Full Sample") %>%
-    bold(part = "header", i = 1) %>%
-    align(align = "center", part = "header") %>%
-    fontsize(part = "header", size = 14) %>%
-    fontsize(part = "body", size = 11) %>%
-    fontsize(part = "footer", size = 9) %>%
-    line_spacing(part = "header", space = 1.2) %>%
-    line_spacing(part = "body", space = 0.75) %>%
-    line_spacing(part = "footer", space = 0.5) 
-  
-  mod.3c <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.own == "Private"))
-  mod.3d <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.own == "Not Private"))
-  
-  tab2c<- tbl_regression(mod.3c,
-                         include = c(starts_with("nb_")),
+  tab2c<- tbl_regression(mod.2c,
+                         include = c(starts_with("nb_"), starts_with("trans.")),
                          intercept = TRUE,
-                         label = list(nb_corporate = "Share Corporate Owned",
+                         label = list(trans.ten = "Tenure Change",
+                                      nb_corporate = "Share Corporate Owned",
                                       nb_private = "Share Private Owned",
                                       nb_legal = "Share Legal Owned",
                                       nb_other = "Share Other Owned",
@@ -170,22 +149,10 @@ reg<- set_flextable_defaults(font.family = "Times")
     modify_header(label = "Changes in:", estimate = "Estimate",
                   std.error = "Std. Error")
   
-  tab2d<- tbl_regression(mod.3d,
-                         include = c(starts_with("nb_")),
-                         intercept = TRUE,
-                         label = list(nb_corporate = "Share Corporate Owned",
-                                      nb_private = "Share Private Owned",
-                                      nb_legal = "Share Legal Owned",
-                                      nb_other = "Share Other Owned",
-                                      nb_owner = "Share Owner Occupied"),
-                         estimate_fun = label_style_number(digits = 4))%>%
-    add_significance_stars()%>%
-    add_glance_table(include = c(r.squared, nobs))  %>%
-    remove_abbreviation()%>%
-    modify_header(label = "Changes in:", estimate = "Estimate",
-                  std.error = "Std. Error")
   
-  tab3 <- tbl_merge(list(tab2a, tab2c,tab2d), tab_spanner = c("**Full Sample**", "**Private**", "**Not Private**")) %>%
+  
+  tab2 <- tbl_merge(list(tab2a, tab2b,tab2c), tab_spanner = c("**Model One**", "**Model Two**",
+                                                              "**Model Three**")) %>%
     modify_table_body(
       ~.x %>% 
         dplyr::arrange(
@@ -193,7 +160,7 @@ reg<- set_flextable_defaults(font.family = "Times")
     ) %>%
     as_flex_table() %>%
     add_footer_lines("Standard Errors Clustered as Census Tract") %>%
-    add_header_lines("Table One: Full Sample") %>%
+    add_header_lines("Table Two: One Eighth Mile Radius") %>%
     bold(part = "header", i = 1) %>%
     align(align = "center", part = "header") %>%
     fontsize(part = "header", size = 14) %>%
@@ -203,27 +170,24 @@ reg<- set_flextable_defaults(font.family = "Times")
     line_spacing(part = "body", space = 0.75) %>%
     line_spacing(part = "footer", space = 0.5) 
   
-  indepVars = paste("nb_nonzip","nb_owner",indepVars, sep = "+")
+  
+  
+  
+  
+  
+  
+  
+  
+  indepVars = paste("nb_corporate", "nb_private", "nb_legal", "nb_other", "trans.ten",
+                    "nb_corporate * trans.ten",time.dum, census, sep = "+")
+  
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
-  mod.4 <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
   
-  tab4a<- tbl_regression(mod.4,
-                         include = c(starts_with("nb_")),
-                         intercept = TRUE,
-                         label = list(nb_corporate = "Share Corporate Owned",
-                                      nb_private = "Share Private Owned",
-                                      nb_legal = "Share Legal Owned",
-                                      nb_other = "Share Other Owned",
-                                      nb_owner = "Share Owner Occupied",
-                                      nb_nonzip = "Share Owner not in Zip Area"),
-                         estimate_fun = label_style_number(digits = 4))%>%
-    add_significance_stars()%>%
-    add_glance_table(include = c(r.squared, nobs))  %>%
-    remove_abbreviation()%>%
-    modify_header(label = "Changes in:", estimate = "Estimate",
-                  std.error = "Std. Error")
   
-  mod.4a <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Owner"))
+  mod.4a <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
+
+
+
   mod.4b <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Not Owner"))
   
   tab4b<- tbl_regression(mod.4a,
@@ -279,3 +243,4 @@ reg<- set_flextable_defaults(font.family = "Times")
   
   save_as_docx(tab1, tab2, tab3, tab4, path = "./Analysis/Output/Eighth Tables.docx")
   
+ 
