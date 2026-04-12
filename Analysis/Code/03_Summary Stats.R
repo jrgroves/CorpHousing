@@ -40,6 +40,7 @@ load("./Analysis/Input/Core14.RData")
     tbl_summary(by = CLASS,
                 statistic = list(all_continuous() ~ "{mean} ({sd})",
                                  all_categorical() ~ "{p}%")) %>%
+
     add_overall() %>%
     modify_header(all_stat_cols() ~ "{level}") %>%
     modify_footnote(everything() ~ NA)
@@ -79,7 +80,17 @@ load("./Analysis/Input/Core14.RData")
                              adj_price = "Difference of Real Price",
                              ln_price = "Difference of LN of Real Price",
                              d_saleyr = "Time Between Sales")) %>%
-    add_overall()
+    add_overall() %>%
+    as_flex_table() %>%
+    add_header_lines("Table One: Count and Summary Statistics by Transition Type") %>%
+    bold(part = "header", i = 1) %>%
+    align(align = "center", part = "header") %>%
+    fontsize(part = "header", size = 14) %>%
+    fontsize(part = "body", size = 11) %>%
+    fontsize(part = "footer", size = 9) %>%
+    line_spacing(part = "header", space = 1.2) %>%
+    line_spacing(part = "body", space = 0.75) %>%
+    line_spacing(part = "footer", space = 0.5) 
                 
 #Neighbor Section
   #1/4 Mile Buffers
@@ -101,11 +112,71 @@ load("./Analysis/Input/Core14.RData")
                              nb_prop_agg ~ "Aggricultural")) %>%
    add_overall()
   
- temp <- rs_core1.4 %>%
+ cen.stat1.4a <- rs_core1.4 %>%
    tbl_summary(by = ten1,
-               include = c(starts_with("per_"), income, own_sz, age),
-               statistic = list(all_continuous() ~ "{mean} ({sd})")) %>%
-   add_overall()
+               include = c(per_own, per_wht, per_blk, per_asn, per_oth, per_u16, per_o65, age),
+               statistic = list(all_continuous() ~ "{mean} ({sd})"),
+               label = list(per_own = "Owner Occupied",
+                            per_wht = "White Race",
+                            per_blk = "Black Race",
+                            per_asn = "Asian Race",
+                            per_oth = "Other Race",
+                            per_u16 = "Under 16 years",
+                            per_o65 = "Over 65 years",
+                            per_hs = "High School Diploma",
+                            per_scol = "Some College",
+                            per_asdg = "Associates Degree",
+                            per_bach = "Bach. Degree",
+                            per_advdg = "Advanced Degree",
+                            per_pov1 = "Percent Below Poverty",
+                            income = "Median Income",
+                            age = "Median Age")) %>%
+   add_overall() %>%
+   modify_header(label = "**Changes in**") %>%
+   as_flex_table() %>%
+   add_footer_lines("Values based on 1/4 mile neighborhood buffer") %>%
+   add_header_lines("Table Two: Summary Stats by Transaction Type") %>%
+   bold(part = "header", i = 1) %>%
+   align(align = "center", part = "header") %>%
+   fontsize(part = "header", size = 14) %>%
+   fontsize(part = "body", size = 11) %>%
+   fontsize(part = "footer", size = 9) %>%
+   line_spacing(part = "header", space = 1.2) %>%
+   line_spacing(part = "body", space = 0.75) %>%
+   line_spacing(part = "footer", space = 0.5) 
+ 
+ cen.stat1.4b <- rs_core1.4 %>%
+   tbl_summary(by = ten1,
+               include = c(per_hs, per_scol, per_asdg, per_advdg, per_pov1, income),
+               statistic = list(all_continuous() ~ "{mean} ({sd})"),
+               label = list(per_own = "Owner Occupied",
+                            per_wht = "White Race",
+                            per_blk = "Black Race",
+                            per_asn = "Asian Race",
+                            per_oth = "Other Race",
+                            per_u16 = "Under 16 years",
+                            per_o65 = "Over 65 years",
+                            per_hs = "High School Diploma",
+                            per_scol = "Some College",
+                            per_asdg = "Associates Degree",
+                            per_bach = "Bach. Degree",
+                            per_advdg = "Advanced Degree",
+                            per_pov1 = "Percent Below Poverty",
+                            income = "Median Income",
+                            age = "Median Age")) %>%
+   add_overall() %>%
+   modify_header(label = "**Changes in**") %>%
+   as_flex_table() %>%
+   add_footer_lines("Values based on 1/4 mile neighborhood buffer") %>%
+   add_header_lines("Table Two (cont): Summary Stats by Transaction Type") %>%
+   bold(part = "header", i = 1) %>%
+   align(align = "center", part = "header") %>%
+   fontsize(part = "header", size = 14) %>%
+   fontsize(part = "body", size = 11) %>%
+   fontsize(part = "footer", size = 9) %>%
+   line_spacing(part = "header", space = 1.2) %>%
+   line_spacing(part = "body", space = 0.75) %>%
+   line_spacing(part = "footer", space = 0.5) 
  
  #1/8 Mile Buffers
      load("./Analysis/Input/Core18.RData")  

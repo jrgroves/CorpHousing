@@ -22,10 +22,8 @@ reg<- set_flextable_defaults(font.family = "Times")
                                  trans.ten=="Not Owner to Owner" ~  "N2O",
                                  trans.ten=="Owner to Not Owner" ~ "O2N",
                                  trans.ten=="Owner to Owner" ~ "O2O",
-                                 TRUE ~ NA) ,
-           trans.ten = factor(trans.ten, levels = c("O2O", "N2N", "N2O", "O2N"),
-                              labels = c("Owner to Owner","Nonowner to Nonowner",
-                                         "Nonowner to Owner","Owner to Nonowner")))
+                                 TRUE ~ NA),
+           trans.ten = factor(trans.ten, levels = c("O2O", "N2N", "N2O", "O2N")))
   
 #Define Variables 
   
@@ -37,12 +35,12 @@ reg<- set_flextable_defaults(font.family = "Times")
   time.dum <- paste(time.dum[!(time.dum %in% time.drop)], collapse = "+")
   
   census <- variables[grepl('per_', variables)] 
-    cen.drop <- c("per_oth", "per_hs", "per_pov3", "per_own", "per_pov1")
+    cen.drop <- c("per_oth", "per_hs", "per_pov3", "per_own", "per_pov2")
   census <- paste(census[!(census %in% cen.drop)], collapse = "+")
     census <- (paste("income", census, sep = "+"))
   
 #Base Model  
-  indepVars = time.dum
+  indepVars = paste(time.dum, sep = "+")
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
   mod.1a <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
   
@@ -127,7 +125,7 @@ reg<- set_flextable_defaults(font.family = "Times")
                  estimate_fun = label_style_number(digits = 4))%>%
     add_significance_stars()%>%
     add_glance_table(include = c(r.squared, nobs))  %>%
-    remove_abbreviation()%>%
+    remove_abbreviation() %>%
     modify_header(label = "Changes in:", estimate = "Estimate",
                   std.error = "Std. Error")
 
@@ -160,7 +158,7 @@ reg<- set_flextable_defaults(font.family = "Times")
     ) %>%
     as_flex_table() %>%
     add_footer_lines("Standard Errors Clustered as Census Tract") %>%
-    add_header_lines("Table Two: One Eighth Mile Radius") %>%
+    add_header_lines("Table Three: One Eighth Mile Radius") %>%
     bold(part = "header", i = 1) %>%
     align(align = "center", part = "header") %>%
     fontsize(part = "header", size = 14) %>%
@@ -178,19 +176,16 @@ reg<- set_flextable_defaults(font.family = "Times")
   
   
   
-  indepVars = paste("nb_corporate", "nb_private", "nb_legal", "nb_other", "trans.ten",
-                    "nb_corporate * trans.ten",time.dum, census, sep = "+")
-  
+  indepVars = paste("nb_corporate", "nb_private", "nb_legal", "nb_other", time.dum, census, sep = "+")
   myModel <- as.formula(paste(depVar,indepVars,sep = ' ~ '))
-  
   
   mod.4a <-lm_robust(myModel, cluster = GEOID, data = rs_core1.8)
 
 
 
-  mod.4b <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.end.ten == "Not Owner"))
+  mod.4b <-lm_robust(myModel, cluster = GEOID, data = subset(rs_core1.8, trans.ten == "N2O"))
   
-  tab4b<- tbl_regression(mod.4a,
+  tab4b<- tbl_regression(mod.4b,
                          include = c(starts_with("nb_")),
                          intercept = TRUE,
                          label = list(nb_corporate = "Share Corporate Owned",

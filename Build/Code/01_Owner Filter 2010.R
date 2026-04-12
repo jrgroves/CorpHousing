@@ -16,6 +16,11 @@
 #June 19, 2025: Discovered Error in the read.csv code that was cutting short the ownership files. Also found that some
 #               parids have been changed over time.
 #March 10, 2026: Added the categories of legal and other to reduce categories to only four.
+#April 7, 2026: Added code at end to fix a selection of cases where trustees and partnerships were both ID'ed in the code.
+# April 12, 2026: Modified clean code at the end after the files are compiled into one. Added a file "clean3.csv" which is a 
+#                 file with actual co_names that are classified into the correct categories. This file was created by 
+#                 visually inspecting more than 100K observations. I also removed the automatic assumption that 
+#                 all owner occupied are private.
 
 rm(list=ls())
 
@@ -41,64 +46,64 @@ y<-seq(2010,2024)
                                                           "department", "saint", "association","association"))
   corp_words <- data.table::rbindlist(list(corporate_words, new_corp_words))
 #Corporate Names#####
-CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
-          "\\s(CASTLE POINT LIVING)+\\s+",
-          "\\s(BRYANTS TOWING)+\\s+",
-          "\\s(REHAB)+.*\\s+",
-          "\\s(PRECISION PLUMBING SOLUTIONS)+\\s+",
-          "\\s(WIRELESS)+\\s+",
-          "\\s(AERO CHARTER)+\\s+",
-          "\\s(AMERITECH)+\\s+",
-          "\\s(AUTOMATIC ICE SYSTEMS)+\\s+",
-          "\\s(BABY HAVEN)+\\s+",
-          "\\s(CENTURY ALARM)+\\s+",
-          "\\s(CRESTWOOD EXECUTIVE CENTER)+\\s+",
-          "\\s(DOUGLASS LAND LIMITED)+\\s+",
-          "\\s(DRURY INN)+\\s+",
-          "\\s(DUBLEN HOMES)+\\s+",
-          "\\s(EDYS GRAND ICE CREAM)+\\s+",
-          "\\s(EIGHTEEN INESTMENTS)+\\s+",
-          "\\s(EVERGREEN EQUITIES)+\\s+",
-          "\\s(HICKORY CREST)+\\s+",
-          "\\s(NORTH MERAMEC)+\\s+",
-          "\\s(CAR WASH)+\\s+",
-          "\\s(CARWASH)+\\s+",
-          "\\s(FOUR SEVENTY SEVEN)+\\s+",
-          "\\s(GALE BUILDING & REMODELING)+\\s+",
-          "\\s(ATLAS TRUCK SALES)+\\s+",
-          "\\s(YOUDE FAMILY)+\\s+",
-          "\\s(H & M MACHINE SERVICE)+\\s+",
-          "\\s(HGS DESIGN LTD)+\\s+",
-          "\\s(I-44 MARINE)+\\s+",
-          "\\s(JIFFY LUBE)+\\s+",
-          "\\s(KINGS FOOD MARKET)+\\s+",
-          "\\s(LADUE INNERBELT EXECUTIVE CENTER)+\\s+",
-          "\\s(LECHNER & LECHNER LTD)+\\s+",
-          "\\s(CUSTOM HOMES)+\\s+",
-          "\\s(LONE STAR STEAKHOUSE)+\\s+",
-          "\\s(MIDAMERICA CENTER)+\\s+",
-          "\\s(NORFOLK & WESTERN RAILROAD)+\\s+",
-          "\\s(OUTDOOR SYSTEMS)+\\s+",
-          "\\s(P & A DRYWALL SUPPLY)+\\s+",
-          "\\s(PARK CRESTWOOD LTD)+\\s+",
-          "\\s(PHOENIX INTERNATIONAL)+\\s+",
-          "\\s(PHOENIX INTTERNATIONAL)+\\s+",
-          "\\s(PINE LAWN DENTAL)+\\s+",
-          "\\s(PIZZA INN)+\\s+",
-          "\\s(PLEASANT HOLLOW LTD)+\\s+",
-          "\\s(R MITCHELL RENOVATIONS)+\\s+",
-          "\\s(RED LOBSTER INNS OF AMERICA)+\\s+",
-          "\\s(SHERWOODS FOREST NURSERY)+\\s+",
-          "\\s(SPRINT PCS)+\\s+",
-          "\\s(REFUSE DISPOSAL SERVICE)+\\s+",
-          "\\s(SUTTON RESOURCES LTD)+\\s+",
-          "\\s(TOWNHOUSES LTD)+\\s+",
-          "\\s(TUCKEY & ASSOCS PHYSICAL)+\\s+",
-          "\\s(UNION PACIFIC SYSTEMS)+\\s+",
-          "\\s(WINTER BROTHERS MATERIALS)+\\s+",
-          "\\s(WOLFF SHOE MANUFACTURING)+\\s+",
-          "\\s(MARYVILLE CENTRE HOTEL)+\\s+",
-          "\\s(HIGHLAND MINI STORAGE)+\\s+")
+CORP <- c("ASHFIELD ACTIVE LIVING",
+          "CASTLE POINT LIVING",
+          "BRYANTS TOWING",
+          "REHAB)+.*+",
+          "PRECISION PLUMBING SOLUTIONS",
+          "WIRELESS",
+          "AERO CHARTER",
+          "AMERITECH",
+          "AUTOMATIC ICE SYSTEMS",
+          "BABY HAVEN",
+          "CENTURY ALARM",
+          "CRESTWOOD EXECUTIVE CENTER",
+          "DOUGLASS LAND LIMITED",
+          "DRURY INN",
+          "DUBLEN HOMES",
+          "EDYS GRAND ICE CREAM",
+          "EIGHTEEN INESTMENTS",
+          "EVERGREEN EQUITIES",
+          "HICKORY CREST",
+          "NORTH MERAMEC",
+          "CAR WASH",
+          "CARWASH",
+          "FOUR SEVENTY SEVEN",
+          "GALE BUILDING & REMODELING",
+          "ATLAS TRUCK SALES",
+          "YOUDE FAMILY",
+          "H & M MACHINE SERVICE",
+          "HGS DESIGN LTD",
+          "I-44 MARINE",
+          "JIFFY LUBE",
+          "KINGS FOOD MARKET",
+          "LADUE INNERBELT EXECUTIVE CENTER",
+          "LECHNER & LECHNER LTD",
+          "CUSTOM HOMES",
+          "LONE STAR STEAKHOUSE",
+          "MIDAMERICA CENTER",
+          "NORFOLK & WESTERN RAILROAD",
+          "OUTDOOR SYSTEMS",
+          "P & A DRYWALL SUPPLY",
+          "PARK CRESTWOOD LTD",
+          "PHOENIX INTERNATIONAL",
+          "PHOENIX INTTERNATIONAL",
+          "PINE LAWN DENTAL",
+          "PIZZA INN",
+          "PLEASANT HOLLOW LTD",
+          "R MITCHELL RENOVATIONS",
+          "RED LOBSTER INNS OF AMERICA",
+          "SHERWOODS FOREST NURSERY",
+          "SPRINT PCS",
+          "REFUSE DISPOSAL SERVICE",
+          "SUTTON RESOURCES LTD",
+          "TOWNHOUSES LTD",
+          "TUCKEY & ASSOCS PHYSICAL",
+          "UNION PACIFIC SYSTEMS",
+          "WINTER BROTHERS MATERIALS",
+          "WOLFF SHOE MANUFACTURING",
+          "MARYVILLE CENTRE HOTEL",
+          "HIGHLAND MINI STORAGE")
 
 #Create Owner Data Files####
    for(i in y){
@@ -129,8 +134,7 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
       
  ##Ownership Classification Section#####     
   own_dat <- work %>%
-    filter(tenure == "NONOWNER")  %>%
-    mutate(co_name = gsub("corpation", "corporation", co_name)) %>%  #This part of mutate correct common misspellings
+    mutate(co_name = gsub("corpation", "corporation", co_name)) %>%                 #This part of mutate correct common misspellings
     mutate(corporate = case_when(str_detect(co_name, "\\s+corporation+.*") ~ 1,
                                  str_detect(co_name, "\\s+incorporated+.*") ~ 1,
                                  str_detect(co_name, "\\s+compan+.*") ~ 1,
@@ -147,13 +151,11 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                                  str_detect(co_name, "\\s+rehabilitation+.*") ~ 1,
                                  str_detect(co_name, "\\s+construction+.*") ~ 1,
                                  str_detect(co_name, "\\s+housinginc+.*") ~ 1,
-                                 #str_detect(co_name, str_c(CORP, collapse = "|"))~ 1,
+                                 co_name %in% CORP ~ 1,
                                  TRUE ~ 0),
            trustee = case_when(str_detect(co_name, "\\s+pandt+") ~ 1,
                                str_detect(co_name, "\\s+trust+") ~ 1,
                                str_detect(co_name, "\\s+trustee+") ~ 1,
-                               str_detect(co_name, "\\s+tande+") ~ 1,
-                               str_detect(co_name, "\\s+tr+") ~ 1,
                                str_detect(co_name, "\\s+irrevocable+") ~ 1,
                                str_detect(co_name, "\\s+revocable+") ~ 1,
                                str_detect(co_name, "\\s+living+") ~ 1,
@@ -211,14 +213,7 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                              str_detect(co_name, "\\s+mutual+.*") ~ 1,
                                         TRUE ~ 0),
            partnership = case_when(str_detect(co_name, "\\s+partnership+") ~ 1,
-                                   str_detect(co_name, "\\s+etal+") ~ 1,
-                                   str_detect(co_name, "\\s+et al+") ~ 1,
                                    TRUE ~ 0),
-           private = case_when(str_detect(co_name, "\\s+handw+") ~ 1,
-                               str_detect(co_name, "\\s+handh+") ~ 1,
-                               str_detect(co_name, "\\s+wandw+") ~ 1,
-                               str_detect(co_name, "\\s+wandh+") ~ 1,
-                               TRUE ~ 0),
            hoa = case_when(str_detect(co_name, "\\s+residential+.*\\s") ~ 1,
                            str_detect(co_name, "\\s*(condominium)+.*\\s*") ~ 1,
                            str_detect(co_name, "\\s*(club\\s)+\\s*") ~ 1,
@@ -269,9 +264,8 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                             str_detect(co_name, "\\s+greenway+.*\\s") ~ 1,
                             str_detect(co_name, "\\s+levee+.*\\s") ~ 1,
                             TRUE ~ 0),
-           key = corporate + trustee + private + partnership + nonprofit + reown + hoa + muni,
-           private = case_when(key == 0 ~ 1,
-                               TRUE ~ private)) %>%
+           private = 0,
+           key = 0) %>%
     mutate(corporate = case_when(reown == 1 & corporate == 1 ~ 0,
                                  TRUE ~ corporate),
            trustee = case_when(reown == 1 & trustee == 1 ~ 0,
@@ -288,20 +282,6 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
                            TRUE ~ hoa)) %>%
     distinct(., parid, .keep_all = TRUE ) 
   
-  ownocc <- work %>%
-    filter(tenure == "OWNER")%>%
-    mutate(corporate = 0,
-           trustee = 0,
-           nonprofit = 0,
-           reown = 0,
-           hoa = 0,
-           muni = 0,
-           key = 0,
-           partnership = 0,
-           private = 1)%>%
-    distinct(., parid, .keep_all = TRUE ) 
-  
-  own_dat <- rbind(own_dat, ownocc)
   own_dat$year <- i
   
   
@@ -310,89 +290,192 @@ CORP <- c("\\s(ASHFIELD ACTIVE LIVING)+\\s+",
          OWN <- rbind(OWN, own_dat))
   rm(own_dat)
   }
-           
-#Cleanup of Owner Data
-
-fix1<-tolower(c("BALLWIN","BRIDGETON","CHESTERFIELD","EUREKA", "FENTON", "FLORISSANT","GLENCOE","GROVER",
-        "HAZELWOOD","MARYLAND HEIGHTS","PACIFIC","SAINT ANN","SAINT LOUIS","VALLEY PARK"))
-
-OWN1 <- OWN %>%
-  mutate(co_state = case_when(is.na(co_state) & co_city %in% fix1 ~ "mo",
-                               TRUE ~ co_state),
-         co_zip = as.character(co_zip),
-         co_zip = case_when(co_zip == "630" ~ "63017",
-                            co_zip == "6319" ~ "63019",
-                            co_zip == "2829" ~ "63144",
-                            co_zip == "6314" ~ "63144",
-                            co_zip == "6332" ~ "63132",
-                            co_zip == "9136" ~ "91367",
-                            po_zip == "8053" ~ "63031",
-                             TRUE ~ co_zip),
-         zip = substr(co_zip, 1, 2),
-         co_state = case_when(is.na(co_state) & zip == "63" ~ "mo",
-                               TRUE ~ co_state),
-         po_zip = case_when(tenure == "OWNER" ~ co_zip,
-                              TRUE ~ po_zip))
-
-#Fix missing property addresses, city, zips, and coordinators using obs from other years####
-
-OWN1 <- OWN1 %>%
-  arrange(po_stradr, year) %>%
-  mutate(po_city = case_when(tenure == "OWNER" ~ co_city,
-                             TRUE ~ po_city),
-         po_zip = case_when(tenure == "OWNER" ~ co_zip,
-                            TRUE ~ po_zip) )%>%
-  group_by(po_stradr) %>%
-  fill(po_city, .direction = "downup") %>%
-  fill(po_zip, .direction = "downup") %>%
-  fill(xcoord, .direction = "downup") %>%
-  fill(ycoord, .direction = "downup") %>%
-  ungroup() 
-
-  #temp1 <- OWN1 %>%
-  #  filter(is.na(po_city) | is.na(po_zip)) %>%
-  #  distinct(parid, .keep_all = TRUE) 
-  #write.csv(temp1, file = "./build/output/temp1.csv")
-  temp1 <- read.csv(file="./build/output/temp1.csv")
-
-  OWN1 <- OWN1 %>%
-    left_join(., temp1, by=c("parid")) %>%
-    mutate(po_stradr = coalesce(po_stradr, fx_stradr),
-           po_city = coalesce(po_city, fx_city),
-           po_zip = coalesce(po_zip, as.character(fx_zip)))
+         
   
-  #temp2 <- OWN1 %>%
-  #  mutate(co_city = case_when(tenure == "OWNER" ~ po_city,
-  #                             TRUE ~ co_city),
-  #         co_zip = case_when(tenure == "OWNER" ~ po_zip,
-  #                            TRUE ~ co_zip) )%>%
-  #  filter(is.na(co_city) | is.na(co_state) | is.na(co_zip)) %>%
-  #  distinct(parid, .keep_all = T)
-  #write.csv(temp2, file = "./build/output/temp2.csv")
-  temp2 <- read.csv(file="./build/output/temp2.csv")
-  
-  OWN1 <- OWN1 %>%
-    left_join(., temp2, by=c("parid", "po_stradr")) %>%
-    mutate(co_city = coalesce(co_city, fxc_city),
-           co_state = coalesce(co_state, fxc_state),
-           co_zip = coalesce(co_zip, as.character(fxc_zip)))
-  
-OWN <- OWN1 %>%
-  mutate(po_zip = as.numeric(po_zip),
-         co_zip = as.numeric(co_zip),
-         legal = case_when(trustee == 1 ~ 1,
-                           partnership == 1 ~ 1,
-                           TRUE ~ 0),
-         other = case_when(nonprofit == 1 ~ 1,
-                           reown == 1 ~ 1,
-                           hoa == 1 ~ 1,
-                           muni == 1 ~ 1,
-                           TRUE ~ 0)) %>%
-  select(-c(zip, fx_stradr, fx_city, fx_zip, fxc_city, fxc_state, fxc_zip, fxc_stradr)) %>%
-  filter(!is.na(xcoord)) %>% #drops 4 observations
-  filter(po_stradr != "") %>%  #drops 11 observation 
-  filter(!is.na(po_zip)) %>% #drops 9 observation 
-  distinct(parid, year, .keep_all = TRUE)
+    
+#Cleanup of Owner Data####
 
+    fix1<-tolower(c("BALLWIN","BRIDGETON","CHESTERFIELD","EUREKA", "FENTON", "FLORISSANT","GLENCOE","GROVER",
+            "HAZELWOOD","MARYLAND HEIGHTS","PACIFIC","SAINT ANN","SAINT LOUIS","VALLEY PARK"))
+    
+    OWN1 <- OWN %>%
+      mutate(co_state = case_when(is.na(co_state) & co_city %in% fix1 ~ "mo",
+                                   TRUE ~ co_state),
+             co_zip = as.character(co_zip),
+             co_zip = case_when(co_zip == "630" ~ "63017",
+                                co_zip == "6319" ~ "63019",
+                                co_zip == "2829" ~ "63144",
+                                co_zip == "6314" ~ "63144",
+                                co_zip == "6332" ~ "63132",
+                                co_zip == "9136" ~ "91367",
+                                po_zip == "8053" ~ "63031",
+                                 TRUE ~ co_zip),
+             zip = substr(co_zip, 1, 2),
+             co_state = case_when(is.na(co_state) & zip == "63" ~ "mo",
+                                   TRUE ~ co_state),
+             po_zip = case_when(tenure == "OWNER" ~ co_zip,
+                                  TRUE ~ po_zip))
+    
+    #Fix missing property addresses, city, zips, and coordinators using obs from other years
+    
+    OWN1 <- OWN1 %>%
+      arrange(po_stradr, year) %>%
+      mutate(po_city = case_when(tenure == "OWNER" ~ co_city,
+                                 TRUE ~ po_city),
+             po_zip = case_when(tenure == "OWNER" ~ co_zip,
+                                TRUE ~ po_zip) )%>%
+      group_by(po_stradr) %>%
+      fill(po_city, .direction = "downup") %>%
+      fill(po_zip, .direction = "downup") %>%
+      fill(xcoord, .direction = "downup") %>%
+      fill(ycoord, .direction = "downup") %>%
+      ungroup() 
+    
+      #temp1 <- OWN1 %>%
+      #  filter(is.na(po_city) | is.na(po_zip)) %>%
+      #  distinct(parid, .keep_all = TRUE) 
+      #write.csv(temp1, file = "./build/output/temp1.csv")
+      temp1 <- read.csv(file="./build/output/temp1.csv")
+    
+      OWN1 <- OWN1 %>%
+        left_join(., temp1, by=c("parid")) %>%
+        mutate(po_stradr = coalesce(po_stradr, fx_stradr),
+               po_city = coalesce(po_city, fx_city),
+               po_zip = coalesce(po_zip, as.character(fx_zip)))
+      
+      #temp2 <- OWN1 %>%
+      #  mutate(co_city = case_when(tenure == "OWNER" ~ po_city,
+      #                             TRUE ~ co_city),
+      #         co_zip = case_when(tenure == "OWNER" ~ po_zip,
+      #                            TRUE ~ co_zip) )%>%
+      #  filter(is.na(co_city) | is.na(co_state) | is.na(co_zip)) %>%
+      #  distinct(parid, .keep_all = T)
+      #write.csv(temp2, file = "./build/output/temp2.csv")
+      temp2 <- read.csv(file="./build/output/temp2.csv")
+      
+      OWN1 <- OWN1 %>%
+        left_join(., temp2, by=c("parid", "po_stradr")) %>%
+        mutate(co_city = coalesce(co_city, fxc_city),
+               co_state = coalesce(co_state, fxc_state),
+               co_zip = coalesce(co_zip, as.character(fxc_zip)))
+      
+    OWN <- OWN1 %>%
+      mutate(po_zip = as.numeric(po_zip),
+             co_zip = as.numeric(co_zip),
+             legal = case_when(trustee == 1 ~ 1,
+                               partnership == 1 ~ 1,
+                               TRUE ~ 0),
+             other = case_when(nonprofit == 1 ~ 1,
+                               reown == 1 ~ 1,
+                               hoa == 1 ~ 1,
+                               muni == 1 ~ 1,
+                               TRUE ~ 0)) %>%
+      select(-c(zip, fx_stradr, fx_city, fx_zip, fxc_city, fxc_state, fxc_zip, fxc_stradr)) %>%
+      filter(!is.na(xcoord)) %>% #drops 4 observations
+      filter(po_stradr != "") %>%  #drops 11 observation 
+      filter(!is.na(po_zip)) %>% #drops 9 observation 
+      distinct(parid, year, .keep_all = TRUE)
+
+
+
+
+
+
+
+    clean <- read.csv(file = "./Build/Input/Clean3.csv")
+    
+    OWN <- OWN %>%
+      mutate(trustee =  case_when(
+        co_name %in% clean$private ~ 0,
+        co_name %in% clean$corporate ~ 0,
+        co_name %in% clean$trustee ~ 1,
+        co_name %in% clean$partnership ~ 0,
+        co_name %in% clean$hoa ~ 0,
+        co_name %in% clean$nonprofit ~ 0,
+        co_name %in% clean$muni ~ 0,
+        co_name %in% clean$reown ~ 0,
+        TRUE ~ trustee),
+        private = case_when(co_name %in% clean$private ~ 1,
+                            co_name %in% clean$corporate ~ 0,
+                            co_name %in% clean$trustee ~ 0,
+                            co_name %in% clean$partnership ~ 0,
+                            co_name %in% clean$hoa ~ 0,
+                            co_name %in% clean$nonprofit ~ 0,
+                            co_name %in% clean$muni ~ 0,
+                            co_name %in% clean$reown ~ 0,
+                            str_detect(co_name, "\\shandw\\s") ~ 1,
+                            str_detect(co_name, "\\sjandt\\s") ~ 1,
+                            str_detect(co_name, "\\shandh\\s") ~ 1,
+                            str_detect(co_name, "jt") ~ 1,
+                            str_detect(co_name, "j andt") ~ 1,
+                            co_stradr == po_stradr & tenure == "OWNER" ~ 1,
+                            TRUE ~ private),
+        corporate = case_when(
+          co_name %in% clean$private ~ 0,
+          co_name %in% clean$corporate ~ 1,
+          co_name %in% clean$trustee ~ 0,
+          co_name %in% clean$partnership ~ 0,
+          co_name %in% clean$hoa ~ 0,
+          co_name %in% clean$nonprofit ~ 0,
+          co_name %in% clean$muni ~ 0,
+          co_name %in% clean$reown ~ 0,
+          TRUE ~ corporate),
+        hoa = case_when( co_name %in% clean$private ~ 0,
+                         co_name %in% clean$corporate ~ 0,
+                         co_name %in% clean$trustee ~ 0,
+                         co_name %in% clean$partnership ~ 0,
+                         co_name %in% clean$hoa ~ 1,
+                         co_name %in% clean$nonprofit ~ 0,
+                         co_name %in% clean$muni ~ 0,
+                         co_name %in% clean$reown ~ 0,
+                         TRUE ~ hoa),
+        partnership = case_when(
+          co_name %in% clean$private ~ 0,
+          co_name %in% clean$corporate ~ 0,
+          co_name %in% clean$trustee ~ 0,
+          co_name %in% clean$partnership ~ 1,
+          co_name %in% clean$hoa ~ 0,
+          co_name %in% clean$nonprofit ~ 0,
+          co_name %in% clean$muni ~ 0,
+          co_name %in% clean$reown ~ 0,
+          TRUE ~ partnership),
+        nonprofit = case_when( co_name %in% clean$private ~ 0,
+                               co_name %in% clean$corporate ~ 0,
+                               co_name %in% clean$trustee ~ 0,
+                               co_name %in% clean$partnership ~ 0,
+                               co_name %in% clean$hoa ~ 0,
+                               co_name %in% clean$nonprofit ~ 1,
+                               co_name %in% clean$muni ~ 0,
+                               co_name %in% clean$reown ~ 0,
+                               TRUE ~ nonprofit),
+        muni = case_when( co_name %in% clean$private ~ 0,
+                          co_name %in% clean$corporate ~ 0,
+                          co_name %in% clean$trustee ~ 0,
+                          co_name %in% clean$partnership ~ 0,
+                          co_name %in% clean$hoa ~ 0,
+                          co_name %in% clean$nonprofit ~ 0,
+                          co_name %in% clean$muni ~ 1,
+                          co_name %in% clean$reown ~ 0,
+                          str_detect(co_name, "plat") ~ 0,
+                          TRUE ~ muni),
+        reown = case_when( co_name %in% clean$private ~ 0,
+                           co_name %in% clean$corporate ~ 0,
+                           co_name %in% clean$trustee ~ 0,
+                           co_name %in% clean$partnership ~ 0,
+                           co_name %in% clean$hoa ~ 0,
+                           co_name %in% clean$nonprofit ~ 0,
+                           co_name %in% clean$muni ~ 0,
+                           co_name %in% clean$reown ~ 1,
+                           str_detect(co_name, "limited partnership") ~ 0,
+                           TRUE ~ reown),
+        key = private + trustee + corporate + partnership + hoa + muni + nonprofit + reown)
+    
+    OWN <- OWN %>%
+      mutate(private = case_when(key > 1 & private == 1 ~ 0,
+                                 TRUE ~ private),
+             key = private + trustee + corporate + partnership + hoa + muni + nonprofit + reown)
+    
+    
+ 
 save(OWN, file="./Build/Output/Own10.RData")
 
