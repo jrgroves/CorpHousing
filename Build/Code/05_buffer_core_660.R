@@ -70,16 +70,26 @@ library(sf)
     filter(!is.na(trustee)) 
   
   neighbors <- working %>%
-    select(parid, saleyr) %>%
-    mutate(neighbors = 1) %>%
-    summarise(neighbors = sum(neighbors), .by = c(parid, saleyr)) %>%
+    select(parid, saleyr, LIVUNIT, PROPCLASS) %>%
+    mutate(neighbor = 1,
+           LIVUNIT = case_when(is.na(LIVUNIT) ~ 0,
+                               TRUE ~ LIVUNIT),
+           neighbor_lu = case_when(LIVUNIT > 0 ~ 1,
+                                   TRUE ~ 0),
+           neighbor_pclass = case_when(PROPCLASS == "R" ~ 1,
+                                       PROPCLASS == "W" ~ 1,
+                                       PROPCLASS == "X" ~ 1,
+                                       TRUE ~ 0)) %>%
+    summarise(neighbors = sum(neighbor),
+              neighbor_lu = sum(neighbor_lu),
+              neighbor_pclass = sum(neighbor_pclass), .by = c(parid, saleyr)) %>%
     distinct()
-   
-  working <- working %>%   
+
+  working2 <- working %>%  
+    select(-key) %>%
     mutate(
       po_livunit = replace_na(po_livunit, 0),
-      nonres = ifelse(is.na(corporate), 1, 0), #This creates a value for the nonresidential properties in neighbors
-      across(.cols = corporate:key,
+      across(.cols = corporate:other,
              ~ifelse(is.na(.), 0, .)),
       nonzip = ifelse(po_zip != co_zip, 1, 0),
       nonzip = ifelse(is.na(nonzip), 0, nonzip),
@@ -94,14 +104,14 @@ library(sf)
                              PROPCLASS == "X" ~ 1,
                              PROPCLASS == "Z" ~ 1,
                              TRUE ~ 0)) %>%
-    select(-c(tenure, co_state, co_zip, po_zip, po_livunit, key, PROPCLASS, neigh.parid, LUC, ID))  %>%
-    summarise(across(LIVUNIT:prop_multi, mean), .by = c(parid, saleyr)) %>%
+    select(-c(tenure, co_state, co_zip, po_zip, po_livunit, PROPCLASS, neigh.parid, LUC, ID)) %>%
+    summarise(across(LIVUNIT:prop_multi, sum), .by = c(parid, saleyr)) %>%
     rename_with(~str_c("nb_", .), LIVUNIT:prop_multi)
   rm(own)
   
  #Join to the core data and save as a new version of core
   core2 <- core %>%
-    left_join(., working, by=c("parid", "saleyr")) %>%
+    left_join(., working2, by=c("parid", "saleyr")) %>%
     left_join(., neighbors, by = c("parid", "saleyr")) %>%
     filter(!is.na(neighbors),
            !is.na(nb_other),
