@@ -23,7 +23,7 @@ library(sf)
     select(LOCATOR, PROPCLASS, LUC, LIVUNIT) 
 
 #Filter our the parcels that are in the sales data and pull those from the map data
-  working <- core %>%
+  working <- sales %>%
     select(parid) %>%
     distinct() %>%
     left_join(., loc, by=c("parid" = "LOCATOR")) %>%
@@ -38,13 +38,18 @@ library(sf)
     st_buffer(., 660) 
 
   buffer2 <- loc.cen %>%
+    filter(!is.na(PROPCLASS)) %>%
     st_join(., buffer) %>%
     filter(!is.na(ID)) %>%
     st_drop_geometry() %>%
     rename("base.parid" = "parid",
            "neigh.parid" = "LOCATOR") %>%
-    filter(!is.na(PROPCLASS)) 
-
+    mutate(sfh = case_when(LUC == "110" ~ 1,
+                           TRUE ~ 0),
+           mfh = case_when(LUC == "115" ~ 1,
+                           TRUE ~ 0)) 
+  
+  
 #Housekeeping
   rm(buffer, working, loc, loc.cen)
   gc()
@@ -56,7 +61,7 @@ library(sf)
     select(parid, po_livunit, po_zip, co_zip, co_state, tenure, corporate:other)
   rm(OWN)
     
-  working <- core %>%
+  working <- sales %>%
     select(parid, saleyr)%>%
     left_join(., buffer2, by=c("parid" = "base.parid"), relationship = "many-to-many") %>%
     filter(!is.na(PROPCLASS))  #Removes 20 cases; likely same as above in core with no match on map.
@@ -70,31 +75,21 @@ library(sf)
     filter(!is.na(trustee)) 
   
   neighbors <- working %>%
-    select(parid, saleyr, LIVUNIT, PROPCLASS) %>%
-    mutate(neighbor = 1,
-           LIVUNIT = case_when(is.na(LIVUNIT) ~ 0,
-                               TRUE ~ LIVUNIT),
-           neighbor_lu = case_when(LIVUNIT > 0 ~ 1,
-                                   TRUE ~ 0),
-           neighbor_pclass = case_when(PROPCLASS == "R" ~ 1,
-                                       PROPCLASS == "W" ~ 1,
-                                       PROPCLASS == "X" ~ 1,
-                                       TRUE ~ 0)) %>%
-    summarise(neighbors = sum(neighbor),
-              neighbor_lu = sum(neighbor_lu),
-              neighbor_pclass = sum(neighbor_pclass), .by = c(parid, saleyr)) %>%
-    distinct()
-
-  working2 <- working %>%  
-    select(-key) %>%
+    select(-c(trustee, nonprofit, reown, partnership, muni, hoa, key)) %>%
+    distinct(parid, saleyr, neigh.parid, .keep_all = TRUE) %>%  
     mutate(
-      po_livunit = replace_na(po_livunit, 0),
       across(.cols = corporate:other,
              ~ifelse(is.na(.), 0, .)),
-      nonzip = ifelse(po_zip != co_zip, 1, 0),
-      nonzip = ifelse(is.na(nonzip), 0, nonzip),
       owner = ifelse(tenure == "OWNER", 1, 0),
       owner = ifelse(is.na(owner), 0, owner),
+      nonzip = ifelse(po_zip != co_zip, 1, 0),
+      nonzip = ifelse(is.na(nonzip), 0, nonzip),
+      across(.cols = corporate:nonzip, ~ .x * sfh, .names = "sfh_{.col}"),
+      across(.cols = corporate:nonzip, ~ .x * (sfh+mfh), .names = "mfh_{.col}"),
+      neighbor_pclass = case_when(PROPCLASS == "R" ~ 1,
+                                  PROPCLASS == "W" ~ 1,
+                                  PROPCLASS == "X" ~ 1,
+                                  TRUE ~ 0),
       prop_agg = ifelse(PROPCLASS == "A", 1, 0),
       prop_com = case_when(PROPCLASS == "C" ~ 1,
                            PROPCLASS == "Y" ~ 1,
@@ -104,19 +99,16 @@ library(sf)
                              PROPCLASS == "X" ~ 1,
                              PROPCLASS == "Z" ~ 1,
                              TRUE ~ 0)) %>%
-    select(-c(tenure, co_state, co_zip, po_zip, po_livunit, PROPCLASS, neigh.parid, LUC, ID)) %>%
-    summarise(across(LIVUNIT:prop_multi, sum), .by = c(parid, saleyr)) %>%
-    rename_with(~str_c("nb_", .), LIVUNIT:prop_multi)
+    select(-c(tenure, co_state, co_zip, po_zip, po_livunit, PROPCLASS, neigh.parid, LUC, ID, LIVUNIT))  %>%
+    summarise(across(sfh:prop_multi, mean), .by = c(parid, saleyr)) %>%
+    rename_with(~str_c("nb_", .), sfh:prop_multi)
+ 
   rm(own)
   
  #Join to the core data and save as a new version of core
-  core2 <- core %>%
-    left_join(., working2, by=c("parid", "saleyr")) %>%
+  core2 <- sales  %>%
     left_join(., neighbors, by = c("parid", "saleyr")) %>%
-    filter(!is.na(neighbors),
-           !is.na(nb_other),
-           !is.na(post_other),
-           !is.na(po_livunit)) %>%
+    filter(!is.na(nb_other)) %>%
     distinct()
   
   save(core2, file="./Build/Output/core_660.RData")

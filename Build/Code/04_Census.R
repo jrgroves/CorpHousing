@@ -233,7 +233,7 @@ save(cen_own, file="./Build/Output/core_own.RData")
 
   load(file="./Build/Output/sal_own.RData")
   
-  core_cen <- core %>%
+  core_cen <- sales %>%
     left_join(., cen.own, by = "parid") %>%
     mutate(year = saleyr,
            GEOID = case_when(year < 2020 ~ GEOID.10,

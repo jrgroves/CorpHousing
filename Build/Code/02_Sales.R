@@ -4,50 +4,46 @@
 
 #Jeremy R. Groves
 #June 27, 2024
-#August 5, 2024: Added BLS data for adjusted and cleaned up files.
-#April 8, 2025: Updated with 2024 EOY Sales file and read from external zip.
+#UPDATES:
+    #August 5, 2024: Added BLS data for adjusted and cleaned up files.
+    #April 8, 2025: Updated with 2024 EOY Sales file and read from external zip.
+    #May 4, 2026: Updated with new BLS API library and methods; additionally I filtered through parcels that sold
+                  #more than once in a year and removed all foreclosed units and kept the most recent if multiple
+                  #valid sales were present.
 
 rm(list=ls())
 
 library(tidyverse)
 library(foreign)
 library(rjson)
-library(blsAPI)
+library(blsR)
 
 #Load in Data#####
 #Set the year of the EOY file to extract from
 i <- 2024
 
 #Extract and Read
-temp <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
-                     "sales.csv"), sep = "|", header = TRUE, stringsAsFactors = FALSE)
+sales <- read.csv(unz(paste0("F:/Data/Saint Louis County Assessor Data/STLCOMO_REAL_ASMTROLL_EOY_",i,".zip"),
+                     "sales.csv"), sep = "|", header = TRUE, stringsAsFactors = FALSE, quote = "")
 
 #Get CPI data from BLS API#####
 
-payload <- list(
-  'seriesid' = c('CUSR0000SA0'),
-  'startyear' = 2000,
-  'endyear' = 2019,
-  'registrationKey' = '8213e4e9bef14041a5f00491b6c123d6')
+response <- get_series('series_id' = c('CUSR0000SA0'),
+                       'start_year' = 2000,
+                       'end_year' = 2019)
 
-response <- blsAPI(payload, 2, TRUE)
-
-cpi <- response %>%
+cpi <- data_as_table(response$data) %>%
   mutate(period = gsub("M", "", period),
          date = paste(period, "01", year, sep="-"),
          date2 = format(as.Date(date, format = "%m-%d-%Y"), "%m-%Y"),
          value = as.numeric(value)) %>%
   select(date2, value)
 
-payload <- list(
-  'seriesid' = c('CUSR0000SA0'),
-  'startyear' = 2020,
-  'endyear' = 2024,
-  'registrationKey' = '8213e4e9bef14041a5f00491b6c123d6')
+response <- get_series('series_id' = c('CUSR0000SA0'),
+                       'start_year' = 2020,
+                       'end_year' = 2024)
 
-response <- blsAPI(payload, 2, TRUE)
-
-cpi2 <- response %>%
+cpi2 <- data_as_table(response$data) %>%
   mutate(period = gsub("M", "", period),
          date = paste(period, "01", year, sep="-"),
          date2 = format(as.Date(date, format = "%m-%d-%Y"), "%m-%Y"),
@@ -56,7 +52,7 @@ cpi2 <- response %>%
 
 cpi <- rbind(cpi, cpi2)
 
-rm(payload, response, cpi2)
+rm(response, cpi2)
 
 #Set parameters#####
 
@@ -64,7 +60,7 @@ rm(payload, response, cpi2)
 
 #Clean Sales Data#####
   
-  sales.tmp <- temp %>%
+  sales.tmp <- sales %>%
     mutate(SALEVAL = case_when(SALEVAL == ".X" ~ "X",
                                SALEVAL == "i" ~ "I",
                                SALEVAL == "x" ~ "X",
@@ -85,11 +81,33 @@ rm(payload, response, cpi2)
              SALEVAL == "X" |
              SALEVAL == "Z" |
              SALEVAL == "T") %>%
-    filter(!is.na(price)) %>%
-    select(PARID, saledate, date2, price, saleyr, SALETYPE, SALEVAL) %>%
+    filter(!is.na(price),
+           price > 0,
+           SOURCE == 1) %>%   #Keeps only buyer reported sales (removes about 146 sales)
+    select(PARID, saledate, date2, price, saleyr, SALETYPE, SALEVAL, SOURCE) %>%
     distinct() %>%
     filter(saleyr > 2001 ) %>%
-    filter(saleyr < 2025) %>%
+    filter(saleyr < 2025)  %>%
+  #Remove foreclosed properties completely from set
+      group_by(PARID, saleyr) %>%
+          mutate(flag = any(SALEVAL == "5"),
+                 count = n()) %>%
+      ungroup() %>%
+      filter(flag == "FALSE") %>%
+      select(-flag) %>%
+  #Keep only VALID sales in multi-year sales
+    filter(case_when(
+      count > 1 ~ SALEVAL == "X",
+      TRUE ~ TRUE)) %>%
+    group_by(PARID, saleyr) %>%
+        mutate(count = n()) %>%
+    ungroup() %>%
+  slice_max(order_by = saledate, by = c(PARID, saleyr))%>%
+  group_by(PARID, saleyr) %>%
+  mutate(count = n()) %>%
+  ungroup() %>%
+  filter(count == 1) %>%
+  select(-count) %>%
     mutate(presale = saleyr - 1,
            postsale = saleyr + 1)
 
@@ -106,3 +124,4 @@ rm(payload, response, cpi2)
 #Save main Sales Data
 
 save(sales, file="./Build/Output/Sales.RData")
+

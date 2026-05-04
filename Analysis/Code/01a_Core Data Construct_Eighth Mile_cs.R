@@ -1,7 +1,8 @@
 #This create the main repeat sales data set with the 1/8 mile buffer
 
 #Jeremy R. Groves
-#Updated: May 9, 2025
+    #Updated: May 9, 2025 - In this update I used the McSpatial processing for repeat sales observations with "0"
+              #denoting the initial sale and "1" denoting the second.
 
 rm(list = ls())
 
@@ -35,33 +36,17 @@ rm(core_cen, core2, temp)
       arrange(parid, saleyr) %>%
       mutate(saleyr1 = saleyr,
              price1 = adj_price,
-             co1 = nb_corporate,
-             leg1 = nb_legal,
-             priv1 = nb_private,
-             oth1 = nb_other,
-             nzip1 = nb_nonzip,
-             own1 = nb_owner,
-             neigh1 = neighbors,
-             neighlu1 = neighbor_lu,
-             neighpc1 = neighbor_pclass,
-             ten1 = case_when(pre_tenure == "OWNER" ~ 1,
-                              TRUE ~ 0)) %>%
+             across(.cols = per_own:nb_prop_multi,
+                    ~ .x,
+                    .names = "{.col}1")) %>%
       group_by(parid) %>%
-      mutate(saleyr0 = lag(saleyr),
-             price0 = lag(adj_price),
-             co0 = lag(nb_corporate),
-             leg0 = lag(nb_legal),
-             priv0 = lag(nb_private),
-             oth0 = lag(nb_other),
-             nzip0 = lag(nb_nonzip),
-             own0 = lag(nb_owner),
-             neigh0 = lag(neighbors),
-             neighlu0 = lag(neighbor_lu),
-             neighpc0 = lag(neighbor_pclass),
-             ten0 = case_when(post_tenure == "OWNER" ~ 1,
-                              TRUE ~ 0)) %>%
+        mutate(price0 = lag(adj_price),
+               saleyr0 = lag(saleyr),
+               across(.cols = per_own:nb_prop_multi,
+                      ~ lag(.x),
+                      .names = "{.col}0")) %>%
       ungroup() %>%
-      select(ends_with("0"), ends_with("1"))  %>%
+      select(parid, ends_with("0"), ends_with("1"), dten, down) %>%
       filter(!is.na(price0))
 
   save (rs2_core1.8, file="./Analysis/Input/Core18.RData")

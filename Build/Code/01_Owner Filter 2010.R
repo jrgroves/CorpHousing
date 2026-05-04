@@ -377,11 +377,6 @@ CORP <- c("ASHFIELD ACTIVE LIVING",
       distinct(parid, year, .keep_all = TRUE)
 
 
-
-
-
-
-
     clean <- read.csv(file = "./Build/Input/Clean3.csv")
     
     OWN <- OWN %>%
@@ -473,9 +468,9 @@ CORP <- c("ASHFIELD ACTIVE LIVING",
     OWN <- OWN %>%
       mutate(private = case_when(key > 1 & private == 1 ~ 0,
                                  TRUE ~ private),
-             key = private + trustee + corporate + partnership + hoa + muni + nonprofit + reown)
-    
-    
- 
+             key = private + trustee + corporate + partnership + hoa + muni + nonprofit + reown,
+             legal = trustee + partnership,
+             other = hoa + muni + nonprofit + reown)
+
 save(OWN, file="./Build/Output/Own10.RData")
 
