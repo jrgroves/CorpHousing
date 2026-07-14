@@ -8,19 +8,25 @@ library(flextable)
 load("./Analysis/Input/Core18.RData")
 
 core <- rs2_core1.8 %>%
-  filter(down==0)
+  filter(price1 != price0) %>%
+  mutate(dy1 = log(price1/price0),
+         dy2 = price1 - price0,
+         dcorp = ifelse((nb_sfh_corporate1 - nb_sfh_corporate0) < -.15, 1, 0),
+         dpriv = (nb_sfh_private1 - nb_sfh_private0),
+         dleg = nb_sfh_legal1 - nb_sfh_legal0,
+         doth = nb_sfh_other1 - nb_sfh_other0) %>%
+  filter(dy2 > -150000,
+         dy2 < 250000)
 
-#From McSpatial Documentation
+##Model Definition
+  mymodel = formula(dy1 ~ xmat + dcorp -1)
 
+#From McSpatial Documentation#####
 
-dy1 <- log(core$price1 / core$price0)
-dy2 <- core$price1 - core$price0
-
-dy <- dy1
 
 timevar <- levels(factor(c(core$saleyr0, core$saleyr1)))
   nt = length(timevar)
-  n = length(dy1)
+  n = length(core$dy1)
   
 xmat <- array(0, dim=c(n, nt-1))
 
@@ -30,23 +36,12 @@ for(j in seq(2,nt)){
 }
 
 
-dcorp <- core %>%
-  mutate(dcorp = nb_sfh_corporate1 - nb_sfh_corporate0) %>%
-  pull(dcorp)
-dcorp2 = dcorp^2
-
-dcorp2 <- case_when(dcorp > 0 ~ 1,
-                      TRUE ~ 0)
-cxmat <- dcorp2 * xmat
-
-
-dpriv <- core$nb_sfh_private1 - core$nb_sfh_private0
-
 # Model One
 
   colnames(xmat) <- paste0("Time", seq(2,nt))
+  
 
-    fit0 <- lm(dy ~ xmat + dcorp + dpriv - 1)
+    fit0 <- lm(mymodel, data = core)
       b0 <- c(array(0,1), fit0$coefficients)
 
       e <- residuals(fit0)
@@ -57,10 +52,10 @@ dpriv <- core$nb_sfh_private1 - core$nb_sfh_private0
         samp <- wgt>0
         wgt <- ifelse(samp == TRUE, 1/wgt, 0)
         
-    fit <- lm(dy ~ xmat + dcorp+ dpriv - 1 , weights = wgt)
-        
+    fit <- lm(mymodel , weights = wgt, data = core)
+
+    
   #names(fit$coefficients) <- colnames(xmat)
-  `%notin%` <- Negate(`%in%`)
     pindex <- c(array(0, 1), fit$coefficients)
     lo <- c(array(0,1), confint(fit, level = 0.95)[,1])
     hi <- c(array(0,1), confint(fit, level = 0.95)[,2])
@@ -68,17 +63,14 @@ dpriv <- core$nb_sfh_private1 - core$nb_sfh_private0
     gr.temp1 <- data.frame(pindex, lo, hi, b0) %>%
       mutate(Time = factor(seq(1:nrow(.))),
              name = rownames(.)) %>%
-      filter(name != "(Intercept)",
-             name != "dcorp",
-             name != "dpriv",) %>%
+      filter(str_detect(name, "xmatTime") | name == "")   %>%
       bind_cols(., timevar) %>%
       rename("Year" = "...7")
-
+    
     ggplot(gr.temp1, aes(x = Year)) +
       geom_line(aes(y = pindex, group = 1)) +
       geom_line(aes(y = lo, group = 1), linetype = "dashed") +
       geom_line(aes(y = hi, group = 1), linetype = "dashed") +
       geom_point(aes(y = b0), color = "red") +
       labs(x = "Year")
-    
   
