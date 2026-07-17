@@ -1,6 +1,6 @@
 #This code pulls the dwelling data from the 2024 assessor's report and saves it for use in other codes.
-#note that in the assessor downloads, the header coloumn is not complete for the dwelling data text file so the 
-#column names are posted seperately via the data dictionary.
+#note that in the assessor downloads, the header column is not complete for the dwelling data text file so the 
+#column names are posted separately via the data dictionary.
   
 #Saves: dwelldat.RData - dwelling data from 2024
 

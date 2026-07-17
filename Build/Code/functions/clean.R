@@ -10,7 +10,8 @@ clean <- function(q, min, max){
                })
   
   # 2. Create the vocabulary
-  stop_words = c("and", "or", "etal")
+  stop_words = c("and", "or", "etal", "limited liability corporation", "llc",
+                 "incorporated")
   
   vocab <- create_vocabulary(it, stopwords = stop_words)
   
